@@ -2180,7 +2180,7 @@ return (
                 <p className="text-red-800 font-medium mb-2">API Key Issue Detected</p>
                 <ol className="list-decimal ml-5 space-y-1">
                   <li>Go to your Supabase project dashboard</li>
-                  <li>Navigate to Project Settings > API</li>
+                  <li>Navigate to Project Settings {'>'} API</li>
                   <li>Copy the "anon" public key (not the service_role key)</li>
                   <li>Update your .env.local file with the correct key</li>
                   <li>Restart your Next.js development server</li>

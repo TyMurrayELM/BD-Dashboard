@@ -431,6 +431,46 @@ interface QuarterlyRockRecord {
   updated_at: string;
 }
 
+interface GuidelineRecord {
+  id: string;
+  guideline_text: string;
+  category: string;
+  sort_order: number;
+  week_start_date?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ObjectionRecord {
+  id: string;
+  objection: string;
+  rebuttal: string;
+  things_to_say: string;
+  things_not_to_say: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface QuickTipRecord {
+  id: string;
+  category: string;
+  tip_text: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface MembershipRecord {
+  id: string;
+  sales_rep: string;
+  groups: string | null;
+  committees: string | null;
+  meeting_schedule: string | null;
+  meetings_attended: number | null;
+  total_meetings: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface CreGroups {
   id: string | null;
   title: string;
@@ -1010,7 +1050,7 @@ const BDDashboard = () => {
       if (guidelinesError) throw guidelinesError;
       
       if (guidelinesData && guidelinesData.length > 0) {
-        setMeetingGuidelines(guidelinesData.map(g => ({
+        setMeetingGuidelines(guidelinesData.map((g: GuidelineRecord) => ({
           id: g.id,
           guidelineText: g.guideline_text,
           category: g.category,
@@ -1026,7 +1066,7 @@ const BDDashboard = () => {
       if (objectionError) throw objectionError;
       
       if (objectionData && objectionData.length > 0) {
-        setObjectionHandling(objectionData.map(o => ({
+        setObjectionHandling(objectionData.map((o: ObjectionRecord) => ({
           id: o.id,
           objection: o.objection,
           rebuttal: o.rebuttal,
@@ -1044,7 +1084,7 @@ const BDDashboard = () => {
       if (tipsError) throw tipsError;
       
       if (tipsData && tipsData.length > 0) {
-        setQuickTips(tipsData.map(t => ({
+        setQuickTips(tipsData.map((t: QuickTipRecord) => ({
           id: t.id,
           category: t.category,
           tipText: t.tip_text
@@ -1076,7 +1116,7 @@ const BDDashboard = () => {
       if (error) throw error;
       
       if (data && data.length > 0) {
-        setMemberships(data.map(m => ({
+        setMemberships(data.map((m: MembershipRecord) => ({
           id: m.id,
           salesRep: m.sales_rep,
           groups: m.groups || '',

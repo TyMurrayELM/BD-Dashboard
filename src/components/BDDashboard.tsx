@@ -416,6 +416,21 @@ interface IssueRecord {
   updated_at: string;
 }
 
+interface QuarterlyRockRecord {
+  id: string;
+  title: string;
+  category: string;
+  assigned_to: string;
+  current_groups?: string;
+  action_items?: string;
+  current_status?: string;
+  updates_notes?: string;
+  event_details?: string;
+  week_start_date: string;
+  created_at: string;
+  updated_at: string;
+}
+
 interface CreGroups {
   id: string | null;
   title: string;
@@ -906,7 +921,7 @@ const BDDashboard = () => {
       
       if (data && data.length > 0) {
         // Process CRE Groups rock
-        const creGroups = data.find(rock => rock.category === 'CRE Groups');
+        const creGroups = data.find((rock: QuarterlyRockRecord) => rock.category === 'CRE Groups');
         if (creGroups) {
           setQuarterlyRocks(prev => ({
             ...prev,
@@ -921,7 +936,7 @@ const BDDashboard = () => {
         }
         
         // Process Production rock
-        const production = data.find(rock => rock.category === 'Production');
+        const production = data.find((rock: QuarterlyRockRecord) => rock.category === 'Production');
         if (production) {
           setQuarterlyRocks(prev => ({
             ...prev,
@@ -936,7 +951,7 @@ const BDDashboard = () => {
         }
         
         // Process Events rock
-        const events = data.find(rock => rock.category === 'Events');
+        const events = data.find((rock: QuarterlyRockRecord) => rock.category === 'Events');
         if (events) {
           let puttingWorldEvent = '';
           let lvCharcuterieEvent = '';

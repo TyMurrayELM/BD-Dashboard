@@ -1321,7 +1321,8 @@ const BDDashboard = () => {
         updated_at: new Date().toISOString()
       };
       
-      let result;
+        // Define explicit type for the result variable
+    let result: { data: any[] | null; error: any } | null;
       
       // If this is a new objection (no valid database ID)
       if (isNew || !objection.id || objection.id.toString().startsWith('temp-')) {
@@ -1471,7 +1472,8 @@ const BDDashboard = () => {
         updated_at: new Date().toISOString()
       };
       
-      let result;
+      // Define explicit type for the result variable
+    let result: { data: any[] | null; error: any } | null;
       
       // If this is a new membership (no valid database ID)
       if (isNew || !membership.id || membership.id.toString().startsWith('temp-')) {
@@ -1613,7 +1615,8 @@ const BDDashboard = () => {
         };
         
         console.log('Saving Level 10 meeting data:', meetingData);
-        let result;
+        // Define explicit type for the result variable
+    let result: { data: any[] | null; error: any } | null;
         
         if (currentMeetingId) {
           console.log('Updating existing meeting with ID:', currentMeetingId);
@@ -2199,7 +2202,8 @@ const BDDashboard = () => {
       };
       
       console.log('Saving yearly goals data:', yearlyGoalsData);
-      let result;
+      // Define explicit type for the result variable
+    let result: { data: any[] | null; error: any } | null;
       
       if (yearlyGoals.id) {
         console.log('Updating existing yearly goals with ID:', yearlyGoals.id);

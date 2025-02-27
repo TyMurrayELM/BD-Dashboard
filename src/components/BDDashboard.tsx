@@ -405,6 +405,17 @@ interface Issue {
   dueDate: Date | null;
 }
 
+interface IssueRecord {
+  id: string;
+  issue_text: string;
+  is_completed: boolean;
+  assigned_to: string | null;
+  due_date: string | null;
+  week_start_date: string;
+  created_at: string;
+  updated_at: string;
+}
+
 interface CreGroups {
   id: string | null;
   title: string;
@@ -857,7 +868,7 @@ const BDDashboard = () => {
       if (error) throw error;
       
       if (data && data.length > 0) {
-        const issuesData: Issue[] = data.map(issue => ({
+        const issuesData: Issue[] = data.map((issue: IssueRecord) => ({
           id: issue.id,
           issueText: issue.issue_text,
           isCompleted: issue.is_completed,

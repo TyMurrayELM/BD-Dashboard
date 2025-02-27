@@ -53,10 +53,6 @@ function Calendar({
         day_hidden: "invisible",
         ...classNames,
       }}
-      components={{
-        iconLeft: () => <ChevronLeft className="h-4 w-4" />,
-        iconRight: () => <ChevronRight className="h-4 w-4" />,
-      }}
       {...props}
     />
   )

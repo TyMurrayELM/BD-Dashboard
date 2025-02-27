@@ -1321,8 +1321,8 @@ const BDDashboard = () => {
         updated_at: new Date().toISOString()
       };
       
-        // Define explicit type for the result variable
-    let result: { data: any[] | null; error: any } | null;
+      // Define explicit type for the result variable and initialize as null
+      let result: { data: any[] | null; error: any } | null = null;
       
       // If this is a new objection (no valid database ID)
       if (isNew || !objection.id || objection.id.toString().startsWith('temp-')) {
@@ -1332,19 +1332,19 @@ const BDDashboard = () => {
           .insert(objectionData)
           .select();
           
-        if (result.error) throw result.error;
+        if (result && result.error) throw result.error;
         
-        if (result.data && result.data.length > 0) {
+        if (result && result.data && result.data.length > 0) {
           // Replace the temporary objection with the one that has a real ID from the database
           setObjectionHandling((prev: Objection[]) => 
             prev.map((obj: Objection) => 
               (obj.id === objection.id) ? 
               { 
-                id: result.data[0].id, 
-                objection: result.data[0].objection,
-                rebuttal: result.data[0].rebuttal,
-                thingsToSay: result.data[0].things_to_say,
-                thingsNotToSay: result.data[0].things_not_to_say,
+                id: result!.data![0].id, 
+                objection: result!.data![0].objection,
+                rebuttal: result!.data![0].rebuttal,
+                thingsToSay: result!.data![0].things_to_say,
+                thingsNotToSay: result!.data![0].things_not_to_say,
                 isEditing: false 
               } : obj
             )
@@ -1359,7 +1359,7 @@ const BDDashboard = () => {
           .eq('id', objection.id)
           .select();
           
-        if (result.error) throw result.error;
+        if (result && result.error) throw result.error;
         
         // Turn off edit mode
         setObjectionHandling((prev: Objection[]) => 
@@ -1472,8 +1472,8 @@ const BDDashboard = () => {
         updated_at: new Date().toISOString()
       };
       
-      // Define explicit type for the result variable
-    let result: { data: any[] | null; error: any } | null;
+      // Define explicit type for the result variable and initialize as null
+      let result: { data: any[] | null; error: any } | null = null;
       
       // If this is a new membership (no valid database ID)
       if (isNew || !membership.id || membership.id.toString().startsWith('temp-')) {
@@ -1483,21 +1483,21 @@ const BDDashboard = () => {
           .insert(membershipData)
           .select();
           
-        if (result.error) throw result.error;
+        if (result && result.error) throw result.error;
         
-        if (result.data && result.data.length > 0) {
+        if (result && result.data && result.data.length > 0) {
           // Replace the temporary membership with the one that has a real ID from the database
           setMemberships((prev: Membership[]) => 
             prev.map((mem: Membership) => 
               (mem.id === membership.id) ? 
               { 
-                id: result.data[0].id, 
-                salesRep: result.data[0].sales_rep,
-                groups: result.data[0].groups || '',
-                committees: result.data[0].committees || '',
-                meetingSchedule: result.data[0].meeting_schedule || '',
-                meetingsAttended: result.data[0].meetings_attended || 0,
-                totalMeetings: result.data[0].total_meetings || 0,
+                id: result!.data![0].id, 
+                salesRep: result!.data![0].sales_rep,
+                groups: result!.data![0].groups || '',
+                committees: result!.data![0].committees || '',
+                meetingSchedule: result!.data![0].meeting_schedule || '',
+                meetingsAttended: result!.data![0].meetings_attended || 0,
+                totalMeetings: result!.data![0].total_meetings || 0,
                 isEditing: false 
               } : mem
             )
@@ -1512,7 +1512,7 @@ const BDDashboard = () => {
           .eq('id', membership.id)
           .select();
           
-        if (result.error) throw result.error;
+        if (result && result.error) throw result.error;
         
         // Turn off edit mode
         setMemberships((prev: Membership[]) => 
@@ -1615,8 +1615,8 @@ const BDDashboard = () => {
         };
         
         console.log('Saving Level 10 meeting data:', meetingData);
-        // Define explicit type for the result variable
-    let result: { data: any[] | null; error: any } | null;
+        // Define explicit type for the result variable and initialize as null
+        let result: { data: any[] | null; error: any } | null = null;
         
         if (currentMeetingId) {
           console.log('Updating existing meeting with ID:', currentMeetingId);
@@ -1631,6 +1631,10 @@ const BDDashboard = () => {
             .from('level10_meetings')
             .insert(meetingData)
             .select();
+        }
+        
+        if (!result) {
+          throw new Error('No result received from database operation');
         }
         
         const { data, error } = result;
@@ -2202,8 +2206,8 @@ const BDDashboard = () => {
       };
       
       console.log('Saving yearly goals data:', yearlyGoalsData);
-      // Define explicit type for the result variable
-    let result: { data: any[] | null; error: any } | null;
+      // Define explicit type for the result variable and initialize as null
+      let result: { data: any[] | null; error: any } | null = null;
       
       if (yearlyGoals.id) {
         console.log('Updating existing yearly goals with ID:', yearlyGoals.id);
@@ -2220,17 +2224,17 @@ const BDDashboard = () => {
           .select();
       }
       
-      if (result.error) {
+      if (result && result.error) {
         console.error('Error saving yearly goals:', result.error);
         throw result.error;
       }
       
-      console.log('Yearly goals save successful, response:', result.data);
-      if (result.data && result.data.length > 0) {
+      console.log('Yearly goals save successful, response:', result?.data);
+      if (result && result.data && result.data.length > 0) {
         console.log('Updating state with new yearly goals ID');
         setYearlyGoals((prev: YearlyGoals) => ({
           ...prev,
-          id: result.data[0].id,
+          id: result!.data![0].id,
           currentRevenue: revenueToSave,
           currentRetention: retentionToSave
         }));

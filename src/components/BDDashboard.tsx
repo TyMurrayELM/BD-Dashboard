@@ -19,363 +19,10 @@ import {
   RefreshCw,
   AlertTriangle
 } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, isSameDay } from 'date-fns';
 
-// Custom hook for Supabase initialization
-const useSupabase = () => {
-  const [supabase, setSupabase] = useState<any>(null);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Get environment variables
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
-    // Log configuration status
-    console.log('Supabase URL defined:', !!supabaseUrl, supabaseUrl ? supabaseUrl.substring(0, 10) + '...' : 'undefined');
-    console.log('Supabase Key defined:', !!supabaseKey, supabaseKey ? `${supabaseKey.substring(0, 5)}...${supabaseKey.substring(supabaseKey.length - 5)}` : 'undefined');
-
-    // Check for missing config
-    if (!supabaseUrl || !supabaseKey) {
-      setConnectionError('Supabase configuration is incomplete. Please check your environment variables.');
-      return;
-    }
-
-    // Initialize Supabase client
-    try {
-      const client = createClient(supabaseUrl, supabaseKey, {
-        auth: { 
-          persistSession: true,
-          autoRefreshToken: true
-        }
-      });
-      setSupabase(client);
-      console.log('Supabase client initialized successfully');
-    } catch (error: any) {
-      console.error('Failed to initialize Supabase client:', error);
-      setConnectionError(`Failed to initialize Supabase client: ${error.message || 'Unknown error'}`);
-    }
-  }, []);
-
-  // Function to check connection
-  const checkConnection = useCallback(async () => {
-    if (!supabase) {
-      setConnectionError('Supabase client is not initialized. Check your environment variables.');
-      return false;
-    }
-    
-    try {
-      console.log('Testing Supabase connection...');
-      const { error } = await supabase.from('level10_meetings').select('count').limit(1);
-      
-      if (error) {
-        if (error.message?.includes('relation') && error.message?.includes('does not exist')) {
-          console.log('Database is accessible but tables are not set up:', error.message);
-          setConnectionError('Database is accessible, but required tables do not exist. Please run the setup SQL script.');
-        } else {
-          console.error('Database connection test failed:', error);
-          setConnectionError(`Database connection failed: ${error.message}`);
-        }
-        return false;
-      } else {
-        console.log('Database connection test successful');
-        setConnectionError(null);
-        return true;
-      }
-    } catch (error: any) {
-      console.error('Failed to check database connection:', error);
-      setConnectionError(`Failed to connect to database: ${error.message || 'Unknown error'}`);
-      return false;
-    }
-  }, [supabase]);
-
-  // Function to set up database tables
-  const setupDatabase = useCallback(async () => {
-    if (!supabase) return false;
-    
-    try {
-      const setupSQL = `
-        -- Level 10 Meetings table
-        CREATE TABLE IF NOT EXISTS level10_meetings (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          meeting_date TIMESTAMPTZ,
-          week_start_date DATE,
-          attendees TEXT,
-          safety_message TEXT,
-          encore_values TEXT,
-          closing_deals TEXT,
-          bidding_deals TEXT,
-          hot_properties TEXT,
-          termination_changes TEXT,
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        -- Yearly Goals table
-        CREATE TABLE IF NOT EXISTS yearly_goals (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          year INT,
-          revenue_target NUMERIC,
-          revenue_description TEXT,
-          retention_goal NUMERIC,
-          retention_description TEXT,
-          current_revenue NUMERIC,
-          current_retention NUMERIC,
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        -- Issues List table
-        CREATE TABLE IF NOT EXISTS issues_list (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          issue_text TEXT,
-          is_completed BOOLEAN DEFAULT FALSE,
-          assigned_to TEXT,
-          due_date DATE,
-          week_start_date DATE,
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        -- Quarterly Rocks table
-        CREATE TABLE IF NOT EXISTS quarterly_rocks (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          title TEXT,
-          category TEXT,
-          assigned_to TEXT,
-          current_groups TEXT,
-          action_items TEXT,
-          current_status TEXT,
-          updates_notes TEXT,
-          event_details JSONB,
-          week_start_date DATE,
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        -- Meeting Guidelines table
-        CREATE TABLE IF NOT EXISTS meeting_guidelines (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          guideline_text TEXT,
-          category TEXT,
-          sort_order INT,
-          week_start_date DATE,
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        -- Objection Handling table
-        CREATE TABLE IF NOT EXISTS objection_handling (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          objection TEXT,
-          rebuttal TEXT,
-          things_to_say TEXT,
-          things_not_to_say TEXT,
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        -- Quick Tips table
-        CREATE TABLE IF NOT EXISTS quick_tips (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          category TEXT,
-          tip_text TEXT,
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        -- Association Memberships table
-        CREATE TABLE IF NOT EXISTS association_memberships (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          sales_rep TEXT,
-          groups TEXT,
-          committees TEXT,
-          meeting_schedule TEXT,
-          meetings_attended INT DEFAULT 0,
-          total_meetings INT DEFAULT 0,
-          week_start_date DATE,
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        -- Targets table
-        CREATE TABLE IF NOT EXISTS targets (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-          contact_name TEXT,
-          contact_title TEXT,
-          contact_email TEXT,
-          company TEXT,
-          properties TEXT,
-          sales_rep TEXT,
-          sales_rep_name TEXT,
-          notes TEXT,
-          status TEXT DEFAULT 'active',
-          projected_value TEXT,
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-      `;
-      
-      const { error } = await supabase.rpc('exec_sql', { sql: setupSQL });
-      
-      if (error) {
-        console.error('Error setting up database tables:', error);
-        if (error.message?.includes('function') && error.message?.includes('does not exist')) {
-          throw new Error('The "exec_sql" RPC function does not exist. Please contact your Supabase administrator to enable it or create tables manually.');
-        }
-        throw error;
-      }
-      
-      console.log('Database tables created successfully!');
-      setConnectionError(null);
-      return true;
-    } catch (error: any) {
-      console.error('Failed to set up database:', error);
-      setConnectionError(`Failed to set up database: ${error.message || 'Unknown error'}`);
-      return false;
-    }
-  }, [supabase]);
-
-  return { supabase, connectionError, setConnectionError, checkConnection, setupDatabase };
-};
-
-// ========================
-// UI Components
-// ========================
-
-// Enhanced section header component
-const SectionHeader = ({ title }: { title: string }) => (
-  <div className="mb-6">
-    <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
-    <div className="h-1 w-20 bg-blue-600 mt-2 rounded-full"></div>
-  </div>
-);
-
-// Enhanced form field component
-interface FormFieldProps {
-  label: string;
-  name: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
-  placeholder: string;
-  isTextArea?: boolean;
-}
-
-const FormField = ({ 
-  label, 
-  name, 
-  value, 
-  onChange, 
-  placeholder, 
-  isTextArea = false 
-}: FormFieldProps) => (
-  <div className="space-y-2 transition-all duration-200 hover:shadow-sm">
-    <label className="block text-sm font-medium text-gray-700">
-      {label}
-    </label>
-    {isTextArea ? (
-      <textarea
-        name={name}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className="w-full bg-white border border-gray-200 rounded-lg p-3 transition-colors duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 min-h-[120px]"
-      />
-    ) : (
-      <Input
-        name={name}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className="w-full bg-white border border-gray-200 rounded-lg p-3 transition-colors duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-      />
-    )}
-  </div>
-);
-
-// Error card component for displaying detailed errors
-interface ErrorCardProps {
-  title: string;
-  error: string | { message?: string; details?: any } | null;
-  onRetry?: () => void;
-}
-
-const ErrorCard = ({ 
-  title, 
-  error, 
-  onRetry 
-}: ErrorCardProps) => (
-  <div className="bg-white rounded-xl p-4 shadow-md border border-red-200 mb-4">
-    <div className="flex items-center text-red-600 mb-3">
-      <AlertTriangle className="h-5 w-5 mr-2" />
-      <h2 className="text-lg font-semibold">{title}</h2>
-    </div>
-    <p className="text-sm text-gray-700 mb-3">
-      {typeof error === 'string' ? error : (error?.message || 'An unknown error occurred')}
-    </p>
-    {error && typeof error !== 'string' && error.details && (
-      <pre className="bg-gray-50 p-2 rounded text-xs overflow-x-auto mb-3">
-        {JSON.stringify(error.details, null, 2)}
-      </pre>
-    )}
-    {onRetry && (
-      <Button 
-        size="sm" 
-        className="bg-red-600 hover:bg-red-700 text-white" 
-        onClick={onRetry}
-      >
-        <RefreshCw className="w-4 h-4 mr-2" /> Retry
-      </Button>
-    )}
-  </div>
-);
-
-// Loading indicator component
-const LoadingIndicator = ({ message = "Loading..." }: { message?: string }) => (
-  <div className="flex justify-center items-center py-8">
-    <Loader2 className="h-6 w-6 animate-spin text-blue-600 mr-3" />
-    <span className="text-gray-600">{message}</span>
-  </div>
-);
-
-// Save button with status indicator
-interface SaveButtonProps {
-  onClick: () => void;
-  status: 'idle' | 'saving' | 'success' | 'error';
-  disabled?: boolean;
-}
-
-const SaveButton = ({ onClick, status, disabled }: SaveButtonProps) => {
-  const getButtonStyle = () => {
-    switch (status) {
-      case 'saving':
-        return 'bg-blue-400 hover:bg-blue-400';
-      case 'success':
-        return 'bg-green-600 hover:bg-green-700';
-      case 'error':
-        return 'bg-red-600 hover:bg-red-700';
-      default:
-        return 'bg-blue-600 hover:bg-blue-700';
-    }
-  };
-  
-  return (
-    <Button 
-      className={`${getButtonStyle()} text-white rounded-lg px-6 py-2 transition-all duration-200 transform hover:scale-105`}
-      onClick={onClick}
-      disabled={disabled || status === 'saving'}
-    >
-      {status === 'saving' ? (
-        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
-      ) : status === 'success' ? (
-        <><Save className="mr-2 h-4 w-4" /> Saved!</>
-      ) : status === 'error' ? (
-        <><AlertTriangle className="mr-2 h-4 w-4" /> Error</>
-      ) : (
-        <><Save className="mr-2 h-4 w-4" /> Save Changes</>
-      )}
-    </Button>
-  );
-};
-
-// ========================
-// Component & Data - Part 2
-// ========================
-
-// Types for state management
+// Data Types and Interfaces
 interface FormData {
   attendees: string;
   safetyMessage: string;
@@ -547,6 +194,7 @@ interface Target {
   status?: string;
   projected_value: string;
   created_at?: string;
+  updated_at?: string;
   company_id?: string;
 }
 
@@ -569,6 +217,367 @@ interface CachedFormData {
     currentMeetingId: string | null;
   };
 }
+
+// Custom hook for Supabase initialization
+const useSupabase = () => {
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Get environment variables
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+    // Log configuration status
+    console.log('Supabase URL defined:', !!supabaseUrl, supabaseUrl ? supabaseUrl.substring(0, 10) + '...' : 'undefined');
+    console.log('Supabase Key defined:', !!supabaseKey, supabaseKey ? `${supabaseKey.substring(0, 5)}...${supabaseKey.substring(supabaseKey.length - 5)}` : 'undefined');
+
+    // Check for missing config
+    if (!supabaseUrl || !supabaseKey) {
+      setConnectionError('Supabase configuration is incomplete. Please check your environment variables.');
+      return;
+    }
+
+    // Initialize Supabase client
+    try {
+      const client = createClient(supabaseUrl, supabaseKey, {
+        auth: { 
+          persistSession: true,
+          autoRefreshToken: true
+        }
+      });
+      setSupabase(client);
+      console.log('Supabase client initialized successfully');
+    } catch (error: any) {
+      console.error('Failed to initialize Supabase client:', error);
+      setConnectionError(`Failed to initialize Supabase client: ${error.message || 'Unknown error'}`);
+    }
+  }, []);
+
+  // Function to check connection
+  const checkConnection = useCallback(async (): Promise<boolean> => {
+    if (!supabase) {
+      setConnectionError('Supabase client is not initialized. Check your environment variables.');
+      return false;
+    }
+    
+    try {
+      console.log('Testing Supabase connection...');
+      const { error } = await supabase.from('level10_meetings').select('count').limit(1);
+      
+      if (error) {
+        if (error.message?.includes('relation') && error.message?.includes('does not exist')) {
+          console.log('Database is accessible but tables are not set up:', error.message);
+          setConnectionError('Database is accessible, but required tables do not exist. Please run the setup SQL script.');
+        } else {
+          console.error('Database connection test failed:', error);
+          setConnectionError(`Database connection failed: ${error.message}`);
+        }
+        return false;
+      } else {
+        console.log('Database connection test successful');
+        setConnectionError(null);
+        return true;
+      }
+    } catch (error: any) {
+      console.error('Failed to check database connection:', error);
+      setConnectionError(`Failed to connect to database: ${error.message || 'Unknown error'}`);
+      return false;
+    }
+  }, [supabase]);
+
+  // Function to set up database tables
+  const setupDatabase = useCallback(async (): Promise<boolean> => {
+    if (!supabase) return false;
+    
+    try {
+      const setupSQL = `
+        -- Level 10 Meetings table
+        CREATE TABLE IF NOT EXISTS level10_meetings (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          meeting_date TIMESTAMPTZ,
+          week_start_date DATE,
+          attendees TEXT,
+          safety_message TEXT,
+          encore_values TEXT,
+          closing_deals TEXT,
+          bidding_deals TEXT,
+          hot_properties TEXT,
+          termination_changes TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        -- Yearly Goals table
+        CREATE TABLE IF NOT EXISTS yearly_goals (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          year INT,
+          revenue_target NUMERIC,
+          revenue_description TEXT,
+          retention_goal NUMERIC,
+          retention_description TEXT,
+          current_revenue NUMERIC,
+          current_retention NUMERIC,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        -- Issues List table
+        CREATE TABLE IF NOT EXISTS issues_list (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          issue_text TEXT,
+          is_completed BOOLEAN DEFAULT FALSE,
+          assigned_to TEXT,
+          due_date DATE,
+          week_start_date DATE,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        -- Quarterly Rocks table
+        CREATE TABLE IF NOT EXISTS quarterly_rocks (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          title TEXT,
+          category TEXT,
+          assigned_to TEXT,
+          current_groups TEXT,
+          action_items TEXT,
+          current_status TEXT,
+          updates_notes TEXT,
+          event_details JSONB,
+          week_start_date DATE,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        -- Meeting Guidelines table
+        CREATE TABLE IF NOT EXISTS meeting_guidelines (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          guideline_text TEXT,
+          category TEXT,
+          sort_order INT,
+          week_start_date DATE,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        -- Objection Handling table
+        CREATE TABLE IF NOT EXISTS objection_handling (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          objection TEXT,
+          rebuttal TEXT,
+          things_to_say TEXT,
+          things_not_to_say TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        -- Quick Tips table
+        CREATE TABLE IF NOT EXISTS quick_tips (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          category TEXT,
+          tip_text TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        -- Association Memberships table
+        CREATE TABLE IF NOT EXISTS association_memberships (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          sales_rep TEXT,
+          groups TEXT,
+          committees TEXT,
+          meeting_schedule TEXT,
+          meetings_attended INT DEFAULT 0,
+          total_meetings INT DEFAULT 0,
+          week_start_date DATE,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        -- Targets table
+        CREATE TABLE IF NOT EXISTS targets (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          contact_name TEXT,
+          contact_title TEXT,
+          contact_email TEXT,
+          company TEXT,
+          properties TEXT,
+          sales_rep TEXT,
+          sales_rep_name TEXT,
+          notes TEXT,
+          status TEXT DEFAULT 'active',
+          projected_value TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `;
+      
+      const { error } = await supabase.rpc('exec_sql', { sql: setupSQL });
+      
+      if (error) {
+        console.error('Error setting up database tables:', error);
+        if (error.message?.includes('function') && error.message?.includes('does not exist')) {
+          throw new Error('The "exec_sql" RPC function does not exist. Please contact your Supabase administrator to enable it or create tables manually.');
+        }
+        throw error;
+      }
+      
+      console.log('Database tables created successfully!');
+      setConnectionError(null);
+      return true;
+    } catch (error: any) {
+      console.error('Failed to set up database:', error);
+      setConnectionError(`Failed to set up database: ${error.message || 'Unknown error'}`);
+      return false;
+    }
+  }, [supabase]);
+
+  return { supabase, connectionError, setConnectionError, checkConnection, setupDatabase };
+};
+
+// ========================
+// UI Components
+// ========================
+
+// Enhanced section header component
+interface SectionHeaderProps {
+  title: string;
+}
+
+const SectionHeader = ({ title }: SectionHeaderProps) => (
+  <div className="mb-6">
+    <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
+    <div className="h-1 w-20 bg-blue-600 mt-2 rounded-full"></div>
+  </div>
+);
+
+// Enhanced form field component
+interface FormFieldProps {
+  label: string;
+  name: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  placeholder: string;
+  isTextArea?: boolean;
+}
+
+const FormField = ({ 
+  label, 
+  name, 
+  value, 
+  onChange, 
+  placeholder, 
+  isTextArea = false 
+}: FormFieldProps) => (
+  <div className="space-y-2 transition-all duration-200 hover:shadow-sm">
+    <label className="block text-sm font-medium text-gray-700">
+      {label}
+    </label>
+    {isTextArea ? (
+      <textarea
+        name={name}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className="w-full bg-white border border-gray-200 rounded-lg p-3 transition-colors duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 min-h-[120px]"
+      />
+    ) : (
+      <Input
+        name={name}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className="w-full bg-white border border-gray-200 rounded-lg p-3 transition-colors duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+      />
+    )}
+  </div>
+);
+
+// Error card component for displaying detailed errors
+interface ErrorCardProps {
+  title: string;
+  error: string | { message?: string; details?: any } | null;
+  onRetry?: () => void;
+}
+
+const ErrorCard = ({ 
+  title, 
+  error, 
+  onRetry 
+}: ErrorCardProps) => (
+  <div className="bg-white rounded-xl p-4 shadow-md border border-red-200 mb-4">
+    <div className="flex items-center text-red-600 mb-3">
+      <AlertTriangle className="h-5 w-5 mr-2" />
+      <h2 className="text-lg font-semibold">{title}</h2>
+    </div>
+    <p className="text-sm text-gray-700 mb-3">
+      {typeof error === 'string' ? error : (error?.message || 'An unknown error occurred')}
+    </p>
+    {error && typeof error !== 'string' && error.details && (
+      <pre className="bg-gray-50 p-2 rounded text-xs overflow-x-auto mb-3">
+        {JSON.stringify(error.details, null, 2)}
+      </pre>
+    )}
+    {onRetry && (
+      <Button 
+        size="sm" 
+        className="bg-red-600 hover:bg-red-700 text-white" 
+        onClick={onRetry}
+      >
+        <RefreshCw className="w-4 h-4 mr-2" /> Retry
+      </Button>
+    )}
+  </div>
+);
+
+// Loading indicator component
+interface LoadingIndicatorProps {
+  message?: string;
+}
+
+const LoadingIndicator = ({ message = "Loading..." }: LoadingIndicatorProps) => (
+  <div className="flex justify-center items-center py-8">
+    <Loader2 className="h-6 w-6 animate-spin text-blue-600 mr-3" />
+    <span className="text-gray-600">{message}</span>
+  </div>
+);
+
+// Save button with status indicator
+interface SaveButtonProps {
+  onClick: () => void;
+  status: 'idle' | 'saving' | 'success' | 'error';
+  disabled?: boolean;
+}
+
+const SaveButton = ({ onClick, status, disabled }: SaveButtonProps) => {
+  const getButtonStyle = () => {
+    switch (status) {
+      case 'saving':
+        return 'bg-blue-400 hover:bg-blue-400';
+      case 'success':
+        return 'bg-green-600 hover:bg-green-700';
+      case 'error':
+        return 'bg-red-600 hover:bg-red-700';
+      default:
+        return 'bg-blue-600 hover:bg-blue-700';
+    }
+  };
+  
+  return (
+    <Button 
+      className={`${getButtonStyle()} text-white rounded-lg px-6 py-2 transition-all duration-200 transform hover:scale-105`}
+      onClick={onClick}
+      disabled={disabled || status === 'saving'}
+    >
+      {status === 'saving' ? (
+        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
+      ) : status === 'success' ? (
+        <><Save className="mr-2 h-4 w-4" /> Saved!</>
+      ) : status === 'error' ? (
+        <><AlertTriangle className="mr-2 h-4 w-4" /> Error</>
+      ) : (
+        <><Save className="mr-2 h-4 w-4" /> Save Changes</>
+      )}
+    </Button>
+  );
+};
+
+// ========================
+// Component & Data - Part 2
+// ========================
 
 const BDDashboard = () => {
   // Use custom Supabase hook
@@ -757,7 +766,7 @@ const BDDashboard = () => {
       }
     } catch (error: any) {
       console.error(`Error fetching data for ${activeTab}:`, error);
-      setTabErrors(prev => ({
+      setTabErrors((prev: TabErrors) => ({
         ...prev,
         [activeTab]: {
           message: `Failed to fetch ${activeTab} data`,
@@ -831,7 +840,7 @@ const BDDashboard = () => {
         }
         setCurrentMeetingId(data[0].id);
         
-        setCachedFormData(prev => ({
+        setCachedFormData((prev: CachedFormData) => ({
           ...prev,
           [cacheKey]: {
             formData: newFormData,
@@ -855,7 +864,7 @@ const BDDashboard = () => {
         setSelectedDate(weekDate);
         setCurrentMeetingId(null);
         
-        setCachedFormData(prev => ({
+        setCachedFormData((prev: CachedFormData) => ({
           ...prev,
           [cacheKey]: {
             formData: resetFormData,
@@ -899,7 +908,7 @@ const BDDashboard = () => {
       }
     } catch (error: any) {
       console.error('Error fetching yearly goals:', error);
-      setTabErrors(prev => ({
+      setTabErrors((prev: TabErrors) => ({
         ...prev,
         vto: {
           message: 'Failed to fetch yearly goals',
@@ -937,7 +946,7 @@ const BDDashboard = () => {
       }
     } catch (error: any) {
       console.error('Error fetching issues list:', error);
-      setTabErrors(prev => ({
+      setTabErrors((prev: TabErrors) => ({
         ...prev,
         vto: {
           message: 'Failed to fetch issues list',
@@ -963,7 +972,7 @@ const BDDashboard = () => {
         // Process CRE Groups rock
         const creGroups = data.find((rock: QuarterlyRockRecord) => rock.category === 'CRE Groups');
         if (creGroups) {
-          setQuarterlyRocks(prev => ({
+          setQuarterlyRocks((prev: QuarterlyRocks) => ({
             ...prev,
             creGroups: {
               id: creGroups.id,
@@ -978,7 +987,7 @@ const BDDashboard = () => {
         // Process Production rock
         const production = data.find((rock: QuarterlyRockRecord) => rock.category === 'Production');
         if (production) {
-          setQuarterlyRocks(prev => ({
+          setQuarterlyRocks((prev: QuarterlyRocks) => ({
             ...prev,
             productionRates: {
               id: production.id,
@@ -1012,7 +1021,7 @@ const BDDashboard = () => {
             }
           }
           
-          setQuarterlyRocks(prev => ({
+          setQuarterlyRocks((prev: QuarterlyRocks) => ({
             ...prev,
             events: {
               id: events.id,
@@ -1026,7 +1035,7 @@ const BDDashboard = () => {
       }
     } catch (error: any) {
       console.error('Error fetching quarterly rocks:', error);
-      setTabErrors(prev => ({
+      setTabErrors((prev: TabErrors) => ({
         ...prev,
         vto: {
           message: 'Failed to fetch quarterly rocks',
@@ -1092,7 +1101,7 @@ const BDDashboard = () => {
       }
     } catch (error: any) {
       console.error('Error fetching presentations data:', error);
-      setTabErrors(prev => ({
+      setTabErrors((prev: TabErrors) => ({
         ...prev,
         presentations: {
           message: 'Failed to fetch presentations data',
@@ -1129,7 +1138,7 @@ const BDDashboard = () => {
       }
     } catch (error: any) {
       console.error('Error fetching memberships data:', error);
-      setTabErrors(prev => ({
+      setTabErrors((prev: TabErrors) => ({
         ...prev,
         memberships: {
           message: 'Failed to fetch memberships data',
@@ -1157,7 +1166,7 @@ const BDDashboard = () => {
       }
     } catch (error: any) {
       console.error('Error fetching targets data:', error);
-      setTabErrors(prev => ({
+      setTabErrors((prev: TabErrors) => ({
         ...prev,
         targetList: {
           message: 'Failed to fetch targets data',
@@ -1183,7 +1192,7 @@ const BDDashboard = () => {
       if (activeTab === "level10" && isFormModified) {
         const cacheKey = `level10_${selectedWeek}`;
         console.log('Saving form data to cache before tab change:', cacheKey, formData);
-        setCachedFormData(prev => ({
+        setCachedFormData((prev: CachedFormData) => ({
           ...prev,
           [cacheKey]: {
             formData: { ...formData },
@@ -1196,7 +1205,7 @@ const BDDashboard = () => {
       
       // Track visited tabs
       if (!visitedTabs.includes(value)) {
-        setVisitedTabs(prev => [...prev, value]);
+        setVisitedTabs((prev: string[]) => [...prev, value]);
       }
       
       setActiveTab(value);
@@ -1208,7 +1217,7 @@ const BDDashboard = () => {
     if (activeTab === "level10" && isFormModified) {
       const cacheKey = `level10_${selectedWeek}`;
       console.log('Saving form data to cache before week change:', cacheKey, formData);
-      setCachedFormData(prev => ({
+      setCachedFormData((prev: CachedFormData) => ({
         ...prev,
         [cacheKey]: {
           formData: { ...formData },
@@ -1225,7 +1234,7 @@ const BDDashboard = () => {
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev: FormData) => ({ ...prev, [name]: value }));
     setIsFormModified(true);
   };
 
@@ -1244,7 +1253,7 @@ const BDDashboard = () => {
   // Handle current revenue input change
   const handleCurrentRevenueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace('M', '').trim();
-    setYearlyGoals(prev => ({
+    setYearlyGoals((prev: YearlyGoals) => ({
       ...prev,
       currentRevenue: value
     }));
@@ -1254,7 +1263,7 @@ const BDDashboard = () => {
   // Handle current retention input change
   const handleCurrentRetentionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace('%', '').trim();
-    setYearlyGoals(prev => ({
+    setYearlyGoals((prev: YearlyGoals) => ({
       ...prev,
       currentRetention: value
     }));
@@ -1278,8 +1287,8 @@ const BDDashboard = () => {
   // Toggle edit mode for an objection
   const handleObjectionEdit = (index: number) => {
     console.log('Editing objection at index:', index);
-    setObjectionHandling(prev => 
-      prev.map((obj, i) => 
+    setObjectionHandling((prev: Objection[]) => 
+      prev.map((obj: Objection, i: number) => 
         i === index ? { ...obj, isEditing: true } : obj
       )
     );
@@ -1287,8 +1296,8 @@ const BDDashboard = () => {
 
   // Update an objection field while editing
   const handleObjectionChange = (index: number, field: keyof Objection, value: string) => {
-    setObjectionHandling(prev => 
-      prev.map((obj, i) => 
+    setObjectionHandling((prev: Objection[]) => 
+      prev.map((obj: Objection, i: number) => 
         i === index ? { ...obj, [field]: value } : obj
       )
     );
@@ -1326,8 +1335,8 @@ const BDDashboard = () => {
         
         if (result.data && result.data.length > 0) {
           // Replace the temporary objection with the one that has a real ID from the database
-          setObjectionHandling(prev => 
-            prev.map(obj => 
+          setObjectionHandling((prev: Objection[]) => 
+            prev.map((obj: Objection) => 
               (obj.id === objection.id) ? 
               { 
                 id: result.data[0].id, 
@@ -1352,8 +1361,8 @@ const BDDashboard = () => {
         if (result.error) throw result.error;
         
         // Turn off edit mode
-        setObjectionHandling(prev => 
-          prev.map(obj => 
+        setObjectionHandling((prev: Objection[]) => 
+          prev.map((obj: Objection) => 
             obj.id === objection.id ? { ...obj, isEditing: false } : obj
           )
         );
@@ -1365,7 +1374,7 @@ const BDDashboard = () => {
     } catch (error: any) {
       console.error('Error saving objection:', error);
       setSaveStatus('error');
-      setTabErrors(prev => ({
+      setTabErrors((prev: TabErrors) => ({
         ...prev,
         presentations: {
           message: 'Failed to save objection',
@@ -1400,7 +1409,7 @@ const BDDashboard = () => {
       }
       
       // Remove from state regardless of whether it was in the database
-      setObjectionHandling(prev => prev.filter((_, i) => i !== index));
+      setObjectionHandling((prev: Objection[]) => prev.filter((_, i: number) => i !== index));
       
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 1500);
@@ -1408,7 +1417,7 @@ const BDDashboard = () => {
     } catch (error: any) {
       console.error('Error deleting objection:', error);
       setSaveStatus('error');
-      setTabErrors(prev => ({
+      setTabErrors((prev: TabErrors) => ({
         ...prev,
         presentations: {
           message: 'Failed to delete objection',
@@ -1426,8 +1435,8 @@ const BDDashboard = () => {
   // Toggle edit mode for a membership
   const handleMembershipEdit = (index: number) => {
     console.log('Editing membership at index:', index);
-    setMemberships(prev => 
-      prev.map((mem, i) => 
+    setMemberships((prev: Membership[]) => 
+      prev.map((mem: Membership, i: number) => 
         i === index ? { ...mem, isEditing: true } : mem
       )
     );
@@ -1435,8 +1444,8 @@ const BDDashboard = () => {
 
   // Update a membership field while editing
   const handleMembershipChange = (index: number, field: keyof Membership, value: string | number) => {
-    setMemberships(prev => 
-      prev.map((mem, i) => 
+    setMemberships((prev: Membership[]) => 
+      prev.map((mem: Membership, i: number) => 
         i === index ? { ...mem, [field]: value } : mem
       )
     );
@@ -1476,17 +1485,17 @@ const BDDashboard = () => {
         
         if (result.data && result.data.length > 0) {
           // Replace the temporary membership with the one that has a real ID from the database
-          setMemberships(prev => 
-            prev.map(mem => 
+          setMemberships((prev: Membership[]) => 
+            prev.map((mem: Membership) => 
               (mem.id === membership.id) ? 
               { 
                 id: result.data[0].id, 
                 salesRep: result.data[0].sales_rep,
-                groups: result.data[0].groups,
-                committees: result.data[0].committees,
-                meetingSchedule: result.data[0].meeting_schedule,
-                meetingsAttended: result.data[0].meetings_attended,
-                totalMeetings: result.data[0].total_meetings,
+                groups: result.data[0].groups || '',
+                committees: result.data[0].committees || '',
+                meetingSchedule: result.data[0].meeting_schedule || '',
+                meetingsAttended: result.data[0].meetings_attended || 0,
+                totalMeetings: result.data[0].total_meetings || 0,
                 isEditing: false 
               } : mem
             )
@@ -1504,8 +1513,8 @@ const BDDashboard = () => {
         if (result.error) throw result.error;
         
         // Turn off edit mode
-        setMemberships(prev => 
-          prev.map(mem => 
+        setMemberships((prev: Membership[]) => 
+          prev.map((mem: Membership) => 
             mem.id === membership.id ? { ...mem, isEditing: false } : mem
           )
         );
@@ -1517,7 +1526,7 @@ const BDDashboard = () => {
     } catch (error: any) {
       console.error('Error saving membership:', error);
       setSaveStatus('error');
-      setTabErrors(prev => ({
+      setTabErrors((prev: TabErrors) => ({
         ...prev,
         memberships: {
           message: 'Failed to save membership',
@@ -1552,7 +1561,7 @@ const BDDashboard = () => {
       }
       
       // Remove from state regardless of whether it was in the database
-      setMemberships(prev => prev.filter((_, i) => i !== index));
+      setMemberships((prev: Membership[]) => prev.filter((_, i: number) => i !== index));
       
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 1500);
@@ -1560,7 +1569,7 @@ const BDDashboard = () => {
     } catch (error: any) {
       console.error('Error deleting membership:', error);
       setSaveStatus('error');
-      setTabErrors(prev => ({
+      setTabErrors((prev: TabErrors) => ({
         ...prev,
         memberships: {
           message: 'Failed to delete membership',
@@ -1635,7 +1644,7 @@ const BDDashboard = () => {
           window.localStorage.setItem('lastSaveTime', saveTime.toString());
           
           const cacheKey = `level10_${selectedWeek}`;
-          setCachedFormData(prev => ({
+          setCachedFormData((prev: CachedFormData) => ({
             ...prev,
             [cacheKey]: {
               formData: { ...formData },
@@ -1682,7 +1691,7 @@ const BDDashboard = () => {
           }
           
           if (yearlyGoalsResult.data && yearlyGoalsResult.data.length > 0) {
-            setYearlyGoals(prev => ({ ...prev, id: yearlyGoalsResult.data[0].id }));
+            setYearlyGoals((prev: YearlyGoals) => ({ ...prev, id: yearlyGoalsResult.data[0].id }));
           }
           
           // Save issues list
@@ -1719,8 +1728,8 @@ const BDDashboard = () => {
               }
               
               if (data && data.length > 0) {
-                setIssuesList(prev => 
-                  prev.map(i => 
+                setIssuesList((prev: Issue[]) => 
+                  prev.map((i: Issue) => 
                     i.issueText === issue.issueText && i.id === null
                       ? { ...i, id: data[0].id }
                       : i
@@ -1764,7 +1773,7 @@ const BDDashboard = () => {
             }
             
             if (data && data.length > 0) {
-              setQuarterlyRocks(prev => ({
+              setQuarterlyRocks((prev: QuarterlyRocks) => ({
                 ...prev,
                 creGroups: { ...prev.creGroups, id: data[0].id }
               }));
@@ -1805,7 +1814,7 @@ const BDDashboard = () => {
             }
             
             if (data && data.length > 0) {
-              setQuarterlyRocks(prev => ({
+              setQuarterlyRocks((prev: QuarterlyRocks) => ({
                 ...prev,
                 productionRates: { ...prev.productionRates, id: data[0].id }
               }));
@@ -1813,11 +1822,40 @@ const BDDashboard = () => {
           }
           
           // Parse Events data from text areas
-          const puttingWorld = { name: "Putting World Event", date: "", location: "", attendance: 0, budget_status: "", activities: [] };
-          const lvCharcuterie = { name: "LV Charcuterie Event", date: "", location: "", attendance: 0, budget_status: "", activities: [] };
+          const puttingWorld: {
+            name: string;
+            date: string;
+            location: string;
+            attendance: number;
+            budget_status: string;
+            activities: string[];
+          } = { 
+            name: "Putting World Event", 
+            date: "", 
+            location: "", 
+            attendance: 0, 
+            budget_status: "", 
+            activities: [] 
+          };
+          
+          const lvCharcuterie: {
+            name: string;
+            date: string;
+            location: string;
+            attendance: number;
+            budget_status: string;
+            activities: string[];
+          } = { 
+            name: "LV Charcuterie Event", 
+            date: "", 
+            location: "", 
+            attendance: 0, 
+            budget_status: "", 
+            activities: [] 
+          };
           
           const puttingWorldLines = quarterlyRocks.events.puttingWorldEvent.split('\n');
-          puttingWorldLines.forEach(line => {
+          puttingWorldLines.forEach((line: string) => {
             if (line.startsWith('Date:')) puttingWorld.date = line.replace('Date:', '').trim();
             else if (line.startsWith('Location:')) puttingWorld.location = line.replace('Location:', '').trim();
             else if (line.startsWith('Expected Attendance:')) puttingWorld.attendance = parseInt(line.replace('Expected Attendance:', '').trim()) || 0;
@@ -1826,7 +1864,7 @@ const BDDashboard = () => {
           });
           
           const lvCharcuterieLines = quarterlyRocks.events.lvCharcuterieEvent.split('\n');
-          lvCharcuterieLines.forEach(line => {
+          lvCharcuterieLines.forEach((line: string) => {
             if (line.startsWith('Date:')) lvCharcuterie.date = line.replace('Date:', '').trim();
             else if (line.startsWith('Location:')) lvCharcuterie.location = line.replace('Location:', '').trim();
             else if (line.startsWith('Expected Attendance:')) lvCharcuterie.attendance = parseInt(line.replace('Expected Attendance:', '').trim()) || 0;
@@ -1867,7 +1905,7 @@ const BDDashboard = () => {
             }
             
             if (data && data.length > 0) {
-              setQuarterlyRocks(prev => ({
+              setQuarterlyRocks((prev: QuarterlyRocks) => ({
                 ...prev,
                 events: { ...prev.events, id: data[0].id }
               }));
@@ -1911,8 +1949,8 @@ const BDDashboard = () => {
               }
               
               if (data && data.length > 0) {
-                setMeetingGuidelines(prev => 
-                  prev.map(g => 
+                setMeetingGuidelines((prev: Guideline[]) => 
+                  prev.map((g: Guideline) => 
                     g.guidelineText === guideline.guidelineText && g.id === null
                       ? { ...g, id: data[0].id }
                       : g
@@ -1924,7 +1962,7 @@ const BDDashboard = () => {
           
           // Save all objections that aren't in edit mode
           console.log('Saving objection handling:', objectionHandling);
-          for (const objection of objectionHandling.filter(o => !o.isEditing)) {
+          for (const objection of objectionHandling.filter((o: Objection) => !o.isEditing)) {
             const objectionData = {
               objection: objection.objection,
               rebuttal: objection.rebuttal,
@@ -1955,8 +1993,8 @@ const BDDashboard = () => {
               }
               
               if (data && data.length > 0) {
-                setObjectionHandling(prev => 
-                  prev.map(o => 
+                setObjectionHandling((prev: Objection[]) => 
+                  prev.map((o: Objection) => 
                     o.id === objection.id
                       ? { ...o, id: data[0].id }
                       : o
@@ -1996,8 +2034,8 @@ const BDDashboard = () => {
               }
               
               if (data && data.length > 0) {
-                setQuickTips(prev => 
-                  prev.map(t => 
+                setQuickTips((prev: QuickTip[]) => 
+                  prev.map((t: QuickTip) => 
                     t.category === tip.category && t.tipText === tip.tipText && t.id === null
                       ? { ...t, id: data[0].id }
                       : t
@@ -2014,7 +2052,7 @@ const BDDashboard = () => {
         try {
           console.log('Saving memberships data:', memberships);
           // Only save memberships that aren't in edit mode
-          for (const membership of memberships.filter(m => !m.isEditing)) {
+          for (const membership of memberships.filter((m: Membership) => !m.isEditing)) {
             const membershipData = {
               sales_rep: membership.salesRep,
               groups: membership.groups,
@@ -2048,8 +2086,8 @@ const BDDashboard = () => {
               }
               
               if (data && data.length > 0) {
-                setMemberships(prev => 
-                  prev.map(m => 
+                setMemberships((prev: Membership[]) => 
+                  prev.map((m: Membership) => 
                     m.id === membership.id
                       ? { ...m, id: data[0].id }
                       : m
@@ -2093,8 +2131,8 @@ const BDDashboard = () => {
               }
               
               if (data && data.length > 0) {
-                setTargets(prev => 
-                  prev.map(t => 
+                setTargets((prev: Target[]) => 
+                  prev.map((t: Target) => 
                     t.id === target.id ? { ...t, id: data[0].id } : t
                   )
                 );
@@ -2124,7 +2162,7 @@ const BDDashboard = () => {
     } catch (error: any) {
       console.error('Error saving data:', error);
       setSaveStatus('error');
-      setTabErrors(prev => ({
+      setTabErrors((prev: TabErrors) => ({
         ...prev,
         [activeTab]: {
           message: `Failed to save ${activeTab} data`,
@@ -2186,7 +2224,7 @@ const BDDashboard = () => {
       console.log('Yearly goals save successful, response:', result.data);
       if (result.data && result.data.length > 0) {
         console.log('Updating state with new yearly goals ID');
-        setYearlyGoals(prev => ({
+        setYearlyGoals((prev: YearlyGoals) => ({
           ...prev,
           id: result.data[0].id,
           currentRevenue: revenueToSave,
@@ -2199,7 +2237,7 @@ const BDDashboard = () => {
     } catch (error: any) {
       console.error('Error saving yearly goals:', error);
       setSaveStatus('error');
-      setTabErrors(prev => ({
+      setTabErrors((prev: TabErrors) => ({
         ...prev,
         vto: {
           message: 'Failed to save yearly goals',
@@ -2224,8 +2262,8 @@ const BDDashboard = () => {
     }
     
     try {
-      const changedTargets = updatedTargets.filter(newTarget => {
-        const oldTarget = targets.find(t => t.id === newTarget.id);
+      const changedTargets = updatedTargets.filter((newTarget: Target) => {
+        const oldTarget = targets.find((t: Target) => t.id === newTarget.id);
         if (!oldTarget) return true;
         return JSON.stringify(oldTarget) !== JSON.stringify(newTarget);
       });
@@ -2264,7 +2302,7 @@ const BDDashboard = () => {
           if (error) throw error;
           
           if (data && data.length > 0) {
-            setTargets(prev => prev.map(t => t.id === target.id ? {...t, id: data[0].id} : t));
+            setTargets((prev: Target[]) => prev.map((t: Target) => t.id === target.id ? {...t, id: data[0].id} : t));
           }
         } else {
           console.log('Updating existing target:', target.id);
@@ -2277,8 +2315,8 @@ const BDDashboard = () => {
         }
       }
       
-      const deletedTargets = targets.filter(oldTarget => 
-        !updatedTargets.some(newTarget => newTarget.id === oldTarget.id)
+      const deletedTargets = targets.filter((oldTarget: Target) => 
+        !updatedTargets.some((newTarget: Target) => newTarget.id === oldTarget.id)
       );
       
       for (const target of deletedTargets) {
@@ -2299,7 +2337,7 @@ const BDDashboard = () => {
       console.error('Error saving target:', error);
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 1500);
-      setTabErrors(prev => ({
+      setTabErrors((prev: TabErrors) => ({
         ...prev,
         targetList: {
           message: 'Failed to save target',
@@ -2337,7 +2375,7 @@ const BDDashboard = () => {
   }, [activeTab, selectedWeek, connectionError, fetchData, fetchMeetingForWeek, cachedFormData]);
 
   // Filter targets based on search and rep selection
-  const filteredTargets = targets.filter(target => {
+  const filteredTargets = targets.filter((target: Target) => {
     const matchesSearch = searchQuery === '' || 
       target.contact_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       target.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -2364,9 +2402,9 @@ return (
                 <select 
                   className="outline-none border-none bg-transparent pr-8 text-sm font-medium"
                   value={selectedWeek} 
-                  onChange={(e) => handleWeekChange(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleWeekChange(e.target.value)}
                 >
-                  {weekOptions.map((option) => (
+                  {weekOptions.map((option: WeekOption) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -2556,7 +2594,7 @@ return (
                           <div className="h-8 w-1 bg-blue-500 rounded-full mr-3"></div>
                           <h3 className="text-sm font-medium text-gray-700">Week Range</h3>
                         </div>
-                        <p className="font-medium text-blue-800">{selectedWeek ? weekOptions.find(opt => opt.value === selectedWeek)?.label : 'Current Week'}</p>
+                        <p className="font-medium text-blue-800">{selectedWeek ? weekOptions.find((opt: WeekOption) => opt.value === selectedWeek)?.label : 'Current Week'}</p>
                       </div>
                       
                       <div className="bg-gradient-to-r from-indigo-50 to-white rounded-xl p-6 border border-indigo-100 shadow-sm">
@@ -2732,7 +2770,7 @@ return (
                   <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                     <SectionHeader title="Issues List" />
                     <div className="space-y-4">
-                      {issuesList.map((issue, index) => (
+                      {issuesList.map((issue: Issue, index: number) => (
                         <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-all duration-200 hover:bg-gray-100">
                           <input 
                             type="checkbox" 
@@ -2748,7 +2786,7 @@ return (
                             type="text"
                             className={`flex-1 bg-transparent border-0 focus:ring-0 ${issue.isCompleted ? 'line-through text-gray-400' : 'text-gray-700'}`}
                             defaultValue={issue.issueText}
-                            onBlur={(e) => {
+                            onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
                               const newList = [...issuesList];
                               newList[index].issueText = e.target.value;
                               setIssuesList(newList);
@@ -2760,7 +2798,7 @@ return (
                               className="w-24 text-sm text-gray-500 bg-transparent border-0 focus:ring-0 text-right"
                               defaultValue={issue.assignedTo}
                               placeholder="Assign to"
-                              onBlur={(e) => {
+                              onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
                                 const newList = [...issuesList];
                                 newList[index].assignedTo = e.target.value;
                                 setIssuesList(newList);
@@ -2771,7 +2809,7 @@ return (
                               size="sm" 
                               className="p-1 h-auto text-gray-400 hover:text-red-600"
                               onClick={() => {
-                                setIssuesList(issuesList.filter((_, i) => i !== index));
+                                setIssuesList(issuesList.filter((_, i: number) => i !== index));
                               }}
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
@@ -2804,7 +2842,7 @@ return (
                             type="text"
                             className="text-lg font-semibold text-gray-800 bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-blue-500 focus:ring-0 pb-1"
                             defaultValue={quarterlyRocks.creGroups.title}
-                            onBlur={(e) => {
+                            onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
                               setQuarterlyRocks({
                                 ...quarterlyRocks,
                                 creGroups: {
@@ -2820,7 +2858,7 @@ return (
                               type="text"
                               className="w-28 bg-transparent border-0 focus:ring-0 text-blue-800 font-medium"
                               defaultValue={quarterlyRocks.creGroups.assignedTo}
-                              onBlur={(e) => {
+                              onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
                                 setQuarterlyRocks({
                                   ...quarterlyRocks,
                                   creGroups: {
@@ -2839,7 +2877,7 @@ return (
                               className="mt-2 w-full rounded-xl border border-gray-200 p-3 min-h-24"
                               placeholder="List current CRE group memberships"
                               value={quarterlyRocks.creGroups.currentGroups}
-                              onChange={(e) => {
+                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                                 setQuarterlyRocks({
                                   ...quarterlyRocks,
                                   creGroups: {
@@ -2856,7 +2894,7 @@ return (
                               className="mt-2 w-full rounded-xl border border-gray-200 p-3 min-h-24"
                               placeholder="List pending actions and next steps"
                               value={quarterlyRocks.creGroups.actionItems}
-                              onChange={(e) => {
+                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                                 setQuarterlyRocks({
                                   ...quarterlyRocks,
                                   creGroups: {
@@ -2877,7 +2915,7 @@ return (
                             type="text"
                             className="text-lg font-semibold text-gray-800 bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-blue-500 focus:ring-0 pb-1"
                             defaultValue={quarterlyRocks.productionRates.title}
-                            onBlur={(e) => {
+                            onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
                               setQuarterlyRocks({
                                 ...quarterlyRocks,
                                 productionRates: {
@@ -2893,7 +2931,7 @@ return (
                               type="text"
                               className="w-28 bg-transparent border-0 focus:ring-0 text-green-800 font-medium"
                               defaultValue={quarterlyRocks.productionRates.assignedTo}
-                              onBlur={(e) => {
+                              onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
                                 setQuarterlyRocks({
                                   ...quarterlyRocks,
                                   productionRates: {
@@ -2913,7 +2951,7 @@ return (
                               className="mt-2 w-full rounded-xl border border-gray-200 p-3"
                               placeholder="Current implementation status"
                               value={quarterlyRocks.productionRates.currentStatus}
-                              onChange={(e) => {
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                 setQuarterlyRocks({
                                   ...quarterlyRocks,
                                   productionRates: {
@@ -2930,7 +2968,7 @@ return (
                               className="mt-2 w-full rounded-xl border border-gray-200 p-3 min-h-24"
                               placeholder="Recent updates and progress notes"
                               value={quarterlyRocks.productionRates.updatesNotes}
-                              onChange={(e) => {
+                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                                 setQuarterlyRocks({
                                   ...quarterlyRocks,
                                   productionRates: {
@@ -2951,7 +2989,7 @@ return (
                             type="text"
                             className="text-lg font-semibold text-gray-800 bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-blue-500 focus:ring-0 pb-1"
                             defaultValue={quarterlyRocks.events.title}
-                            onBlur={(e) => {
+                            onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
                               setQuarterlyRocks({
                                 ...quarterlyRocks,
                                 events: {
@@ -2967,7 +3005,7 @@ return (
                               type="text"
                               className="w-28 bg-transparent border-0 focus:ring-0 text-orange-800 font-medium"
                               defaultValue={quarterlyRocks.events.assignedTo}
-                              onBlur={(e) => {
+                              onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
                                 setQuarterlyRocks({
                                   ...quarterlyRocks,
                                   events: {
@@ -2989,7 +3027,7 @@ return (
                               className="mt-2 w-full rounded-xl border border-gray-200 p-3 min-h-32"
                               placeholder="Event details"
                               value={quarterlyRocks.events.puttingWorldEvent}
-                              onChange={(e) => {
+                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                                 setQuarterlyRocks({
                                   ...quarterlyRocks,
                                   events: {
@@ -3009,7 +3047,7 @@ return (
                               className="mt-2 w-full rounded-xl border border-gray-200 p-3 min-h-32"
                               placeholder="Event details"
                               value={quarterlyRocks.events.lvCharcuterieEvent}
-                              onChange={(e) => {
+                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
                                 setQuarterlyRocks({
                                   ...quarterlyRocks,
                                   events: {
@@ -3033,7 +3071,7 @@ return (
                     <div className="bg-purple-50 p-6 rounded-xl border border-purple-200">
                       <SectionHeader title="Notes/Always bring to a meeting:" />
                       <ul className="space-y-3 text-purple-900">
-                        {meetingGuidelines.map((guideline, index) => (
+                        {meetingGuidelines.map((guideline: Guideline, index: number) => (
                           <li key={index} className="flex items-start p-3 bg-white rounded-lg border border-purple-100">
                             <span className="mr-3 text-purple-500">•</span>
                             {guideline.guidelineText}
@@ -3077,14 +3115,14 @@ return (
                             </tr>
                           </thead>
                           <tbody>
-                            {objectionHandling.map((objection, index) => (
+                            {objectionHandling.map((objection: Objection, index: number) => (
                               <tr key={index} className="border-b hover:bg-gray-50 transition-colors">
                                 <td className="p-4">
                                   {objection.isEditing ? (
                                     <Input
                                       className="border border-purple-200 p-2 w-full"
                                       value={objection.objection}
-                                      onChange={(e) => handleObjectionChange(index, 'objection', e.target.value)}
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleObjectionChange(index, 'objection', e.target.value)}
                                     />
                                   ) : (
                                     objection.objection
@@ -3095,7 +3133,7 @@ return (
                                     <textarea
                                       className="border border-purple-200 p-2 w-full min-h-24"
                                       value={objection.rebuttal}
-                                      onChange={(e) => handleObjectionChange(index, 'rebuttal', e.target.value)}
+                                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleObjectionChange(index, 'rebuttal', e.target.value)}
                                     />
                                   ) : (
                                     objection.rebuttal
@@ -3106,12 +3144,12 @@ return (
                                     <textarea
                                       className="border border-purple-200 p-2 w-full min-h-24"
                                       value={objection.thingsToSay}
-                                      onChange={(e) => handleObjectionChange(index, 'thingsToSay', e.target.value)}
+                                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleObjectionChange(index, 'thingsToSay', e.target.value)}
                                       placeholder="Enter items, one per line"
                                     />
                                   ) : (
                                     <ul className="list-disc pl-4 text-sm space-y-1">
-                                      {objection.thingsToSay.split("\n").map((item, i) => (
+                                      {objection.thingsToSay.split("\n").map((item: string, i: number) => (
                                         <li key={i}>{item}</li>
                                       ))}
                                     </ul>
@@ -3122,12 +3160,12 @@ return (
                                     <textarea
                                       className="border border-purple-200 p-2 w-full min-h-24 text-gray-700"
                                       value={objection.thingsNotToSay}
-                                      onChange={(e) => handleObjectionChange(index, 'thingsNotToSay', e.target.value)}
+                                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleObjectionChange(index, 'thingsNotToSay', e.target.value)}
                                       placeholder="Enter items, one per line"
                                     />
                                   ) : (
                                     <ul className="list-disc pl-4 text-sm space-y-1">
-                                      {objection.thingsNotToSay.split("\n").map((item, i) => (
+                                      {objection.thingsNotToSay.split("\n").map((item: string, i: number) => (
                                         <li key={i}>{item}</li>
                                       ))}
                                     </ul>
@@ -3174,7 +3212,7 @@ return (
                     <div className="p-6 border rounded-xl bg-purple-50">
                       <h3 className="text-sm font-medium mb-4">Quick Tips</h3>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        {quickTips.map((tip, index) => (
+                        {quickTips.map((tip: QuickTip, index: number) => (
                           <div key={index} className="bg-white p-4 rounded-xl border border-purple-100 transition-all duration-200 hover:shadow-md">
                             <div className="text-sm text-gray-600">{tip.category}</div>
                             <div className="text-sm mt-2">{tip.tipText}</div>
@@ -3225,14 +3263,14 @@ return (
           </tr>
         </thead>
         <tbody>
-          {memberships.map((membership, index) => (
+          {memberships.map((membership: Membership, index: number) => (
             <tr key={index} className="border-b hover:bg-gray-50">
               <td className="p-3">
                 {membership.isEditing ? (
                   <Input
                     className="border border-orange-200 p-2 w-full"
                     value={membership.salesRep}
-                    onChange={(e) => handleMembershipChange(index, 'salesRep', e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'salesRep', e.target.value)}
                   />
                 ) : (
                   membership.salesRep
@@ -3243,7 +3281,7 @@ return (
                   <Input
                     className="border border-orange-200 p-2 w-full"
                     value={membership.groups}
-                    onChange={(e) => handleMembershipChange(index, 'groups', e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'groups', e.target.value)}
                     placeholder="BOMA, NAIOP, etc."
                   />
                 ) : (
@@ -3255,7 +3293,7 @@ return (
                   <Input
                     className="border border-orange-200 p-2 w-full"
                     value={membership.committees}
-                    onChange={(e) => handleMembershipChange(index, 'committees', e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'committees', e.target.value)}
                     placeholder="Committee names"
                   />
                 ) : (
@@ -3267,7 +3305,7 @@ return (
                   <Input
                     className="border border-orange-200 p-2 w-full"
                     value={membership.meetingSchedule}
-                    onChange={(e) => handleMembershipChange(index, 'meetingSchedule', e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'meetingSchedule', e.target.value)}
                     placeholder="e.g., 2nd Tuesday"
                   />
                 ) : (
@@ -3281,7 +3319,7 @@ return (
                       type="number"
                       className="border border-orange-200 p-2 w-14 text-center"
                       value={membership.meetingsAttended}
-                      onChange={(e) => handleMembershipChange(index, 'meetingsAttended', parseInt(e.target.value) || 0)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'meetingsAttended', parseInt(e.target.value) || 0)}
                       min="0"
                     />
                     <span>/</span>
@@ -3289,7 +3327,7 @@ return (
                       type="number"
                       className="border border-orange-200 p-2 w-14 text-center"
                       value={membership.totalMeetings}
-                      onChange={(e) => handleMembershipChange(index, 'totalMeetings', parseInt(e.target.value) || 0)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'totalMeetings', parseInt(e.target.value) || 0)}
                       min="0"
                     />
                   </div>
@@ -3350,7 +3388,7 @@ return (
         <div className="bg-white p-4 rounded-xl border border-orange-100 transition-all duration-200 hover:shadow-md">
           <div className="text-sm text-gray-600">Total Groups</div>
           <div className="text-2xl font-bold">
-            {new Set(memberships.flatMap(m => m.groups.split(',').map(g => g.trim()))).size}
+            {new Set(memberships.flatMap((m: Membership) => m.groups.split(',').map((g: string) => g.trim()))).size}
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-orange-100 transition-all duration-200 hover:shadow-md">
@@ -3358,8 +3396,8 @@ return (
           <div className="flex items-baseline gap-1">
             <span className="text-2xl font-bold">
               {Math.round(
-                (memberships.reduce((sum, m) => sum + m.meetingsAttended, 0) / 
-                 memberships.reduce((sum, m) => sum + m.totalMeetings, 1)) * 100
+                (memberships.reduce((sum: number, m: Membership) => sum + m.meetingsAttended, 0) / 
+                 memberships.reduce((sum: number, m: Membership) => sum + m.totalMeetings, 1)) * 100
               )}
             </span>
             <span className="text-gray-600">%</span>
@@ -3393,7 +3431,7 @@ return (
                             created_at: new Date().toISOString(),
                             projected_value: "0"
                           };
-                          saveTarget(prevTargets => [...prevTargets, newTarget]);
+                          saveTarget((prevTargets: Target[]) => [...prevTargets, newTarget]);
                         }}
                       >
                         + Add Company
@@ -3415,7 +3453,7 @@ return (
                         }} = {};
                         
                         // Group targets by company
-                        targets.forEach(target => {
+                        targets.forEach((target: Target) => {
                           const companyName = target.company || '';
                           if (!companiesMap[companyName]) {
                             companiesMap[companyName] = {
@@ -3449,11 +3487,11 @@ return (
                                   className="text-lg font-semibold text-gray-800 bg-transparent border-0 focus:ring-0 border-b border-dashed border-red-200 hover:border-red-400 focus:border-red-500"
                                   defaultValue={company.company}
                                   placeholder="Company Name"
-                                  onBlur={(e) => {
+                                  onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
                                     if (e.target.value !== company.company) {
                                       const newCompanyName = e.target.value;
-                                      saveTarget(prevTargets => 
-                                        prevTargets.map(t => 
+                                      saveTarget((prevTargets: Target[]) => 
+                                        prevTargets.map((t: Target) => 
                                           t.company === company.company 
                                             ? {...t, company: newCompanyName} 
                                             : t
@@ -3486,7 +3524,7 @@ return (
                                       created_at: new Date().toISOString(),
                                       projected_value: company.projected_value
                                     };
-                                    saveTarget(prevTargets => [...prevTargets, newContact]);
+                                    saveTarget((prevTargets: Target[]) => [...prevTargets, newContact]);
                                   }}
                                 >
                                   + Add Contact
@@ -3497,8 +3535,8 @@ return (
                                   className="text-red-600 hover:text-red-800"
                                   onClick={() => {
                                     // Delete this company and all its contacts
-                                    saveTarget(prevTargets => 
-                                      prevTargets.filter(t => t.company !== company.company)
+                                    saveTarget((prevTargets: Target[]) => 
+                                      prevTargets.filter((t: Target) => t.company !== company.company)
                                     );
                                   }}
                                 >
@@ -3517,11 +3555,11 @@ return (
                                   className="w-full border border-gray-200 rounded-lg p-2 min-h-32 focus:border-red-400 focus:ring-red-200"
                                   defaultValue={company.properties}
                                   placeholder="List properties we currently maintain"
-                                  onBlur={(e) => {
+                                  onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => {
                                     if (e.target.value !== company.properties) {
                                       const newProperties = e.target.value;
-                                      saveTarget(prevTargets => 
-                                        prevTargets.map(t => 
+                                      saveTarget((prevTargets: Target[]) => 
+                                        prevTargets.map((t: Target) => 
                                           t.company === company.company 
                                             ? {...t, properties: newProperties} 
                                             : t
@@ -3539,11 +3577,11 @@ return (
                                   className="w-full border border-gray-200 rounded-lg p-2 min-h-32 focus:border-red-400 focus:ring-red-200"
                                   defaultValue={company.notes}
                                   placeholder="Add notes about this prospect"
-                                  onBlur={(e) => {
+                                  onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => {
                                     if (e.target.value !== company.notes) {
                                       const newNotes = e.target.value;
-                                      saveTarget(prevTargets => 
-                                        prevTargets.map(t => 
+                                      saveTarget((prevTargets: Target[]) => 
+                                        prevTargets.map((t: Target) => 
                                           t.company === company.company 
                                             ? {...t, notes: newNotes} 
                                             : t
@@ -3566,11 +3604,11 @@ return (
                                   type="number"
                                   className="border border-gray-200 p-2 focus:border-red-400 focus:ring-red-200 font-medium text-green-600"
                                   defaultValue={company.projected_value || '0'}
-                                  onBlur={(e) => {
+                                  onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
                                     if (e.target.value !== company.projected_value) {
                                       const newValue = e.target.value;
-                                      saveTarget(prevTargets => 
-                                        prevTargets.map(t => 
+                                      saveTarget((prevTargets: Target[]) => 
+                                        prevTargets.map((t: Target) => 
                                           t.company === company.company 
                                             ? {...t, projected_value: newValue} 
                                             : t
@@ -3597,10 +3635,10 @@ return (
                                         className="mt-1 border-gray-200 focus:border-red-400 focus:ring-red-200"
                                         defaultValue={contact.name}
                                         placeholder="Contact name"
-                                        onBlur={(e) => {
+                                        onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
                                           if (e.target.value !== contact.name) {
-                                            saveTarget(prevTargets => 
-                                              prevTargets.map(t => 
+                                            saveTarget((prevTargets: Target[]) => 
+                                              prevTargets.map((t: Target) => 
                                                 t.id === contact.id 
                                                   ? {...t, contact_name: e.target.value} 
                                                   : t
@@ -3616,10 +3654,10 @@ return (
                                         className="mt-1 border-gray-200 focus:border-red-400 focus:ring-red-200"
                                         defaultValue={contact.title}
                                         placeholder="Position/Title"
-                                        onBlur={(e) => {
+                                        onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
                                           if (e.target.value !== contact.title) {
-                                            saveTarget(prevTargets => 
-                                              prevTargets.map(t => 
+                                            saveTarget((prevTargets: Target[]) => 
+                                              prevTargets.map((t: Target) => 
                                                 t.id === contact.id 
                                                   ? {...t, contact_title: e.target.value} 
                                                   : t
@@ -3636,10 +3674,10 @@ return (
                                           className="border-gray-200 focus:border-red-400 focus:ring-red-200 flex-1"
                                           defaultValue={contact.email}
                                           placeholder="Email address"
-                                          onBlur={(e) => {
+                                          onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
                                             if (e.target.value !== contact.email) {
-                                              saveTarget(prevTargets => 
-                                                prevTargets.map(t => 
+                                              saveTarget((prevTargets: Target[]) => 
+                                                prevTargets.map((t: Target) => 
                                                   t.id === contact.id 
                                                     ? {...t, contact_email: e.target.value} 
                                                     : t
@@ -3654,8 +3692,8 @@ return (
                                             size="sm" 
                                             className="ml-2 text-red-600 hover:text-red-800"
                                             onClick={() => {
-                                              saveTarget(prevTargets => 
-                                                prevTargets.filter(t => t.id !== contact.id)
+                                              saveTarget((prevTargets: Target[]) => 
+                                                prevTargets.filter((t: Target) => t.id !== contact.id)
                                               );
                                             }}
                                           >
@@ -3690,7 +3728,7 @@ return (
                         <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm">
                           <div className="text-sm text-gray-600 mb-1">Total Companies</div>
                           <div className="text-2xl font-bold">
-                            {new Set(targets.map(t => t.company)).size}
+                            {new Set(targets.map((t: Target) => t.company)).size}
                           </div>
                         </div>
                         <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm">
@@ -3700,7 +3738,7 @@ return (
                         <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm">
                           <div className="text-sm text-gray-600 mb-1">Projected Value</div>
                           <div className="text-2xl font-bold text-green-600">
-                            ${targets.reduce((sum, t) => {
+                            ${targets.reduce((sum: number, t: Target) => {
                               // Count each company's projected value only once
                               const companies = new Set();
                               if (companies.has(t.company)) return sum;

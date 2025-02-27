@@ -24,8 +24,8 @@ import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, 
 
 // Custom hook for Supabase initialization
 const useSupabase = () => {
-  const [supabase, setSupabase] = useState(null);
-  const [connectionError, setConnectionError] = useState(null);
+  const [supabase, setSupabase] = useState<any>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   useEffect(() => {
     // Get environment variables
@@ -52,7 +52,7 @@ const useSupabase = () => {
       });
       setSupabase(client);
       console.log('Supabase client initialized successfully');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to initialize Supabase client:', error);
       setConnectionError(`Failed to initialize Supabase client: ${error.message || 'Unknown error'}`);
     }
@@ -83,7 +83,7 @@ const useSupabase = () => {
         setConnectionError(null);
         return true;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to check database connection:', error);
       setConnectionError(`Failed to connect to database: ${error.message || 'Unknown error'}`);
       return false;
@@ -222,7 +222,7 @@ const useSupabase = () => {
       console.log('Database tables created successfully!');
       setConnectionError(null);
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to set up database:', error);
       setConnectionError(`Failed to set up database: ${error.message || 'Unknown error'}`);
       return false;
@@ -237,7 +237,7 @@ const useSupabase = () => {
 // ========================
 
 // Enhanced section header component
-const SectionHeader = ({ title }) => (
+const SectionHeader = ({ title }: { title: string }) => (
   <div className="mb-6">
     <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
     <div className="h-1 w-20 bg-blue-600 mt-2 rounded-full"></div>
@@ -245,6 +245,15 @@ const SectionHeader = ({ title }) => (
 );
 
 // Enhanced form field component
+interface FormFieldProps {
+  label: string;
+  name: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  placeholder: string;
+  isTextArea?: boolean;
+}
+
 const FormField = ({ 
   label, 
   name, 
@@ -252,7 +261,7 @@ const FormField = ({
   onChange, 
   placeholder, 
   isTextArea = false 
-}) => (
+}: FormFieldProps) => (
   <div className="space-y-2 transition-all duration-200 hover:shadow-sm">
     <label className="block text-sm font-medium text-gray-700">
       {label}
@@ -278,11 +287,17 @@ const FormField = ({
 );
 
 // Error card component for displaying detailed errors
+interface ErrorCardProps {
+  title: string;
+  error: string | { message?: string; details?: any } | null;
+  onRetry?: () => void;
+}
+
 const ErrorCard = ({ 
   title, 
   error, 
   onRetry 
-}) => (
+}: ErrorCardProps) => (
   <div className="bg-white rounded-xl p-4 shadow-md border border-red-200 mb-4">
     <div className="flex items-center text-red-600 mb-3">
       <AlertTriangle className="h-5 w-5 mr-2" />
@@ -291,7 +306,7 @@ const ErrorCard = ({
     <p className="text-sm text-gray-700 mb-3">
       {typeof error === 'string' ? error : (error?.message || 'An unknown error occurred')}
     </p>
-    {error?.details && (
+    {error && typeof error !== 'string' && error.details && (
       <pre className="bg-gray-50 p-2 rounded text-xs overflow-x-auto mb-3">
         {JSON.stringify(error.details, null, 2)}
       </pre>
@@ -309,7 +324,7 @@ const ErrorCard = ({
 );
 
 // Loading indicator component
-const LoadingIndicator = ({ message = "Loading..." }) => (
+const LoadingIndicator = ({ message = "Loading..." }: { message?: string }) => (
   <div className="flex justify-center items-center py-8">
     <Loader2 className="h-6 w-6 animate-spin text-blue-600 mr-3" />
     <span className="text-gray-600">{message}</span>
@@ -317,7 +332,13 @@ const LoadingIndicator = ({ message = "Loading..." }) => (
 );
 
 // Save button with status indicator
-const SaveButton = ({ onClick, status, disabled }) => {
+interface SaveButtonProps {
+  onClick: () => void;
+  status: 'idle' | 'saving' | 'success' | 'error';
+  disabled?: boolean;
+}
+
+const SaveButton = ({ onClick, status, disabled }: SaveButtonProps) => {
   const getButtonStyle = () => {
     switch (status) {
       case 'saving':
@@ -353,6 +374,136 @@ const SaveButton = ({ onClick, status, disabled }) => {
 // ========================
 // Component & Data - Part 2
 // ========================
+
+// Types for state management
+interface FormData {
+  attendees: string;
+  safetyMessage: string;
+  encoreValues: string;
+  closingDeals: string;
+  biddingDeals: string;
+  hotProperties: string;
+  terminationChanges: string;
+}
+
+interface YearlyGoals {
+  id: string | null;
+  year: number;
+  revenueTarget: string;
+  revenueDescription: string;
+  retentionGoal: string;
+  retentionDescription: string;
+  currentRevenue: string;
+  currentRetention: string;
+}
+
+interface Issue {
+  id: string | null;
+  issueText: string;
+  isCompleted: boolean;
+  assignedTo: string;
+  dueDate: Date | null;
+}
+
+interface CreGroups {
+  id: string | null;
+  title: string;
+  assignedTo: string;
+  currentGroups: string;
+  actionItems: string;
+}
+
+interface ProductionRates {
+  id: string | null;
+  title: string;
+  assignedTo: string;
+  currentStatus: string;
+  updatesNotes: string;
+}
+
+interface Events {
+  id: string | null;
+  title: string;
+  assignedTo: string;
+  puttingWorldEvent: string;
+  lvCharcuterieEvent: string;
+}
+
+interface QuarterlyRocks {
+  creGroups: CreGroups;
+  productionRates: ProductionRates;
+  events: Events;
+}
+
+interface Guideline {
+  id: string | null;
+  guidelineText: string;
+  category: string;
+  sortOrder: number;
+}
+
+interface Objection {
+  id: string | null;
+  objection: string;
+  rebuttal: string;
+  thingsToSay: string;
+  thingsNotToSay: string;
+  isEditing?: boolean;
+}
+
+interface QuickTip {
+  id: string | null;
+  category: string;
+  tipText: string;
+}
+
+interface Membership {
+  id: string | null;
+  salesRep: string;
+  groups: string;
+  committees: string;
+  meetingSchedule: string;
+  meetingsAttended: number;
+  totalMeetings: number;
+  isEditing?: boolean;
+}
+
+interface Target {
+  id: string;
+  contact_name: string;
+  contact_title: string;
+  contact_email: string;
+  company: string;
+  properties: string;
+  sales_rep: string;
+  sales_rep_name: string;
+  notes: string;
+  status?: string;
+  projected_value: string;
+  created_at?: string;
+  company_id?: string;
+}
+
+interface WeekOption {
+  value: string;
+  label: string;
+}
+
+interface TabErrors {
+  [key: string]: {
+    message: string;
+    details?: any;
+  };
+}
+
+interface CachedFormData {
+  [key: string]: {
+    formData: FormData;
+    selectedDate: Date;
+    currentMeetingId: string | null;
+  };
+}
+
 const BDDashboard = () => {
   // Use custom Supabase hook
   const { supabase, connectionError, setConnectionError, checkConnection, setupDatabase } = useSupabase();
@@ -360,26 +511,26 @@ const BDDashboard = () => {
   // ========================
   // State Management
   // ========================
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState('idle');
-  const [tabErrors, setTabErrors] = useState({});
-  const [isFormModified, setIsFormModified] = useState(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [tabErrors, setTabErrors] = useState<TabErrors>({});
+  const [isFormModified, setIsFormModified] = useState<boolean>(false);
   
   // Tab and week selection state
-  const [activeTab, setActiveTab] = useState("level10");
-  const [visitedTabs, setVisitedTabs] = useState(["level10"]);
-  const [selectedWeek, setSelectedWeek] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [weekOptions, setWeekOptions] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [activeTab, setActiveTab] = useState<string>("level10");
+  const [visitedTabs, setVisitedTabs] = useState<string[]>(["level10"]);
+  const [selectedWeek, setSelectedWeek] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const [weekOptions, setWeekOptions] = useState<WeekOption[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   
   // Data caching
-  const [cachedFormData, setCachedFormData] = useState({});
-  const [currentMeetingId, setCurrentMeetingId] = useState(null);
-  const lastFetchedRef = useRef({});
+  const [cachedFormData, setCachedFormData] = useState<CachedFormData>({});
+  const [currentMeetingId, setCurrentMeetingId] = useState<string | null>(null);
+  const lastFetchedRef = useRef<{[key: string]: number}>({});
   
   // Level 10 meeting form data
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     attendees: '',
     safetyMessage: '',
     encoreValues: '',
@@ -390,7 +541,7 @@ const BDDashboard = () => {
   });
 
   // Vision Traction Organizer data
-  const [yearlyGoals, setYearlyGoals] = useState({
+  const [yearlyGoals, setYearlyGoals] = useState<YearlyGoals>({
     id: null,
     year: new Date().getFullYear(),
     revenueTarget: '3.25',
@@ -401,14 +552,14 @@ const BDDashboard = () => {
     currentRetention: '88'   // New field
   });
 
-  const [issuesList, setIssuesList] = useState([
+  const [issuesList, setIssuesList] = useState<Issue[]>([
     { id: null, issueText: "Create dream 100 list", isCompleted: false, assignedTo: "Sarah", dueDate: new Date() },
     { id: null, issueText: "Monthly budgets for spend", isCompleted: false, assignedTo: "Mike", dueDate: new Date() },
     { id: null, issueText: "Residential tree pruning fact sheet/social post", isCompleted: false, assignedTo: "Lisa", dueDate: new Date() },
     { id: null, issueText: "Visual aids to show internal communication", isCompleted: false, assignedTo: "John", dueDate: new Date() }
   ]);
 
-  const [quarterlyRocks, setQuarterlyRocks] = useState({
+  const [quarterlyRocks, setQuarterlyRocks] = useState<QuarterlyRocks>({
     creGroups: {
       id: null,
       title: 'CRE Groups & Committees',
@@ -433,26 +584,26 @@ const BDDashboard = () => {
   });
 
   // Presentations data
-  const [meetingGuidelines, setMeetingGuidelines] = useState([
+  const [meetingGuidelines, setMeetingGuidelines] = useState<Guideline[]>([
     { id: null, guidelineText: "Copy of proposal. Know it like the back of your hand. Know the boundaries spot on.", category: "Meeting Preparation", sortOrder: 1 },
     { id: null, guidelineText: "List of references, notable accounts & companies we work with", category: "Meeting Preparation", sortOrder: 2 },
     { id: null, guidelineText: "Write down names of people in the meeting, refer to them by name during meeting", category: "Meeting Preparation", sortOrder: 3 }
   ]);
 
-  const [objectionHandling, setObjectionHandling] = useState([
+  const [objectionHandling, setObjectionHandling] = useState<Objection[]>([
     { id: null, objection: "Your price is higher than competitors", rebuttal: "We focus on total cost of ownership. Our solutions include comprehensive support and proven reliability that reduces long-term expenses.", thingsToSay: "Let me show you our ROI analysis\nHere's how we've saved others money\nConsider these long-term benefits", thingsNotToSay: "We're expensive because we're the best\nOthers cut corners\nYou get what you pay for" },
     { id: null, objection: "We're happy with current provider", rebuttal: "That's great to hear. Many of our current clients said the same before discovering how our innovative approaches could further improve their operations.", thingsToSay: "What do you like most about them?\nMay I share what sets us apart?\nCould we be your backup option?", thingsNotToSay: "They're outdated\nYou're missing out\nBut we're better" },
     { id: null, objection: "Not in this year's budget", rebuttal: "Understanding budget constraints is important. Let's explore how our solution could fit within your current financial framework or plan for next cycle.", thingsToSay: "When does your fiscal year start?\nLet's explore financing options\nWould phased implementation help?", thingsNotToSay: "You can't afford not to\nFind the money somewhere\nIt's not that expensive" }
   ]);
 
-  const [quickTips, setQuickTips] = useState([
+  const [quickTips, setQuickTips] = useState<QuickTip[]>([
     { id: null, category: "Opening", tipText: "Start with questions about their business challenges" },
     { id: null, category: "Presentation", tipText: "Focus on their specific needs and ROI" },
     { id: null, category: "Follow-up", tipText: "Always schedule next steps before leaving" }
   ]);
 
   // Memberships data
-  const [memberships, setMemberships] = useState([
+  const [memberships, setMemberships] = useState<Membership[]>([
     { id: null, salesRep: "Sarah Johnson", groups: "BOMA, NAIOP", committees: "Education Committee, Events Committee", meetingSchedule: "2nd Tuesday, 4th Thursday", meetingsAttended: 3, totalMeetings: 3, isEditing: false },
     { id: null, salesRep: "Mike Chen", groups: "ULI", committees: "Development Council", meetingSchedule: "1st Wednesday", meetingsAttended: 2, totalMeetings: 3, isEditing: false },
     { id: null, salesRep: "Lisa Brown", groups: "CCIM, CREW", committees: "Membership Committee", meetingSchedule: "3rd Monday", meetingsAttended: 3, totalMeetings: 3, isEditing: false },
@@ -460,14 +611,14 @@ const BDDashboard = () => {
   ]);
 
   // Target List data
-  const [targets, setTargets] = useState([
+  const [targets, setTargets] = useState<Target[]>([
     { id: "1", contact_name: "Alex Johnson", contact_title: "Property Manager", contact_email: "alex@example.com", company: "LV Business Center", properties: "Downtown Office Building, Henderson Complex", sales_rep: "SJ", sales_rep_name: "Sarah Johnson", notes: "Interested in landscape renovation for front entrance", created_at: new Date().toISOString(), projected_value: "150" },
     { id: "2", contact_name: "Maria Rodriguez", contact_title: "Facilities Director", contact_email: "maria@example.com", company: "Westside Medical Plaza", properties: "Main Hospital Campus, Satellite Clinics", sales_rep: "MC", sales_rep_name: "Mike Chen", notes: "Meeting scheduled for next month to discuss maintenance contract renewal", created_at: new Date().toISOString(), projected_value: "220" },
     { id: "3", contact_name: "Thomas Wu", contact_title: "Property Owner", contact_email: "thomas@example.com", company: "Wu Properties LLC", properties: "Retail Plaza on Charleston", sales_rep: "LB", sales_rep_name: "Lisa Brown", notes: "Looking for quotes on irrigation system upgrades", created_at: new Date().toISOString(), projected_value: "80" }
   ]);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedRep, setSelectedRep] = useState('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedRep, setSelectedRep] = useState<string>('');
 
   // ========================
   // Utility Functions
@@ -476,7 +627,7 @@ const BDDashboard = () => {
   // Generate week options for the dropdown
   useEffect(() => {
     const generateWeekOptions = () => {
-      const options = [];
+      const options: WeekOption[] = [];
       const today = new Date();
       
       for (let i = -12; i <= 4; i++) {
@@ -538,7 +689,7 @@ const BDDashboard = () => {
         console.log('Fetching target list data...');
         await fetchTargetsData();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error fetching data for ${activeTab}:`, error);
       setTabErrors(prev => ({
         ...prev,
@@ -553,7 +704,7 @@ const BDDashboard = () => {
   }, [activeTab, selectedWeek, supabase, connectionError]);
 
   // Fetch Level 10 Meeting data for the selected week
-  const fetchMeetingForWeek = useCallback(async (weekStartDate) => {
+  const fetchMeetingForWeek = useCallback(async (weekStartDate: string) => {
     if (!supabase) return;
     
     const lastSaveTime = window.localStorage.getItem('lastSaveTime');
@@ -598,7 +749,7 @@ const BDDashboard = () => {
       
       if (data && data.length > 0) {
         console.log('Setting form data from database:', data[0]);
-        const newFormData = {
+        const newFormData: FormData = {
           attendees: data[0].attendees || '',
           safetyMessage: data[0].safety_message || '',
           encoreValues: data[0].encore_values || '',
@@ -624,7 +775,7 @@ const BDDashboard = () => {
         }));
       } else {
         const weekDate = new Date(weekStartDate);
-        const resetFormData = {
+        const resetFormData: FormData = {
           attendees: '',
           safetyMessage: '',
           encoreValues: '',
@@ -649,7 +800,7 @@ const BDDashboard = () => {
       }
       
       setIsFormModified(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error in fetchMeetingForWeek:', error);
       throw error;
     }
@@ -680,7 +831,7 @@ const BDDashboard = () => {
           currentRetention: data[0].current_retention ? data[0].current_retention.toString() : '0'
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching yearly goals:', error);
       setTabErrors(prev => ({
         ...prev,
@@ -706,7 +857,7 @@ const BDDashboard = () => {
       if (error) throw error;
       
       if (data && data.length > 0) {
-        const issuesData = data.map(issue => ({
+        const issuesData: Issue[] = data.map(issue => ({
           id: issue.id,
           issueText: issue.issue_text,
           isCompleted: issue.is_completed,
@@ -718,7 +869,7 @@ const BDDashboard = () => {
       } else {
         // Keep default issues if none found
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching issues list:', error);
       setTabErrors(prev => ({
         ...prev,
@@ -786,9 +937,9 @@ const BDDashboard = () => {
                 const putWorld = eventDetails[0];
                 const lvChar = eventDetails[1];
                 
-                puttingWorldEvent = `Date: ${putWorld.date}\nLocation: ${putWorld.location}\nExpected Attendance: ${putWorld.attendance}\nBudget Status: ${putWorld.budget_status}\nKey Activities:\n${putWorld.activities.map(act => `- ${act}`).join('\n')}`;
+                puttingWorldEvent = `Date: ${putWorld.date}\nLocation: ${putWorld.location}\nExpected Attendance: ${putWorld.attendance}\nBudget Status: ${putWorld.budget_status}\nKey Activities:\n${putWorld.activities.map((act: string) => `- ${act}`).join('\n')}`;
                 
-                lvCharcuterieEvent = `Date: ${lvChar.date}\nLocation: ${lvChar.location}\nExpected Attendance: ${lvChar.attendance}\nBudget Status: ${lvChar.budget_status}\nKey Activities:\n${lvChar.activities.map(act => `- ${act}`).join('\n')}`;
+                lvCharcuterieEvent = `Date: ${lvChar.date}\nLocation: ${lvChar.location}\nExpected Attendance: ${lvChar.attendance}\nBudget Status: ${lvChar.budget_status}\nKey Activities:\n${lvChar.activities.map((act: string) => `- ${act}`).join('\n')}`;
               }
             } catch (e) {
               console.error('Error parsing event details JSON:', e);
@@ -807,7 +958,7 @@ const BDDashboard = () => {
           }));
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching quarterly rocks:', error);
       setTabErrors(prev => ({
         ...prev,
@@ -873,7 +1024,7 @@ const BDDashboard = () => {
           tipText: t.tip_text
         })));
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching presentations data:', error);
       setTabErrors(prev => ({
         ...prev,
@@ -910,7 +1061,7 @@ const BDDashboard = () => {
           isEditing: false // Added isEditing property
         })));
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching memberships data:', error);
       setTabErrors(prev => ({
         ...prev,
@@ -938,7 +1089,7 @@ const BDDashboard = () => {
       if (data && data.length > 0) {
         setTargets(data);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching targets data:', error);
       setTabErrors(prev => ({
         ...prev,
@@ -955,7 +1106,7 @@ const BDDashboard = () => {
   // ========================
   
   // Handle tab change
-  const handleTabChange = (value) => {
+  const handleTabChange = (value: string) => {
     if (value !== activeTab) {
       // If leaving the VTO tab, save any changes to metrics
       if (activeTab === "vto") {
@@ -987,7 +1138,7 @@ const BDDashboard = () => {
   };
 
   // Handle week selection change
-  const handleWeekChange = (value) => {
+  const handleWeekChange = (value: string) => {
     if (activeTab === "level10" && isFormModified) {
       const cacheKey = `level10_${selectedWeek}`;
       console.log('Saving form data to cache before week change:', cacheKey, formData);
@@ -1006,14 +1157,14 @@ const BDDashboard = () => {
   };
 
   // Handle form input changes
-  const handleInputChange = (e) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     setIsFormModified(true);
   };
 
   // Handle yearly goals metrics update
-  const handleMetricsUpdate = (e) => {
+  const handleMetricsUpdate = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     console.log('Updating metrics with current state values:', yearlyGoals.currentRevenue, yearlyGoals.currentRetention);
     
@@ -1025,7 +1176,7 @@ const BDDashboard = () => {
   };
 
   // Handle current revenue input change
-  const handleCurrentRevenueChange = (e) => {
+  const handleCurrentRevenueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace('M', '').trim();
     setYearlyGoals(prev => ({
       ...prev,
@@ -1035,7 +1186,7 @@ const BDDashboard = () => {
   };
 
   // Handle current retention input change
-  const handleCurrentRetentionChange = (e) => {
+  const handleCurrentRetentionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace('%', '').trim();
     setYearlyGoals(prev => ({
       ...prev,
@@ -1045,12 +1196,12 @@ const BDDashboard = () => {
   };
 
   // Handle target search
-  const handleTargetSearch = (e) => {
+  const handleTargetSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
   };
 
   // Handle sales rep filter
-  const handleRepFilter = (e) => {
+  const handleRepFilter = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedRep(e.target.value);
   };
 
@@ -1059,7 +1210,7 @@ const BDDashboard = () => {
   // ==============================================
   
   // Toggle edit mode for an objection
-  const handleObjectionEdit = (index) => {
+  const handleObjectionEdit = (index: number) => {
     console.log('Editing objection at index:', index);
     setObjectionHandling(prev => 
       prev.map((obj, i) => 
@@ -1069,7 +1220,7 @@ const BDDashboard = () => {
   };
 
   // Update an objection field while editing
-  const handleObjectionChange = (index, field, value) => {
+  const handleObjectionChange = (index: number, field: keyof Objection, value: string) => {
     setObjectionHandling(prev => 
       prev.map((obj, i) => 
         i === index ? { ...obj, [field]: value } : obj
@@ -1078,7 +1229,7 @@ const BDDashboard = () => {
   };
 
   // Save an objection to state and Supabase
-  const handleObjectionSave = async (objection, isNew = false) => {
+  const handleObjectionSave = async (objection: Objection, isNew = false) => {
     if (!supabase) {
       console.error('Cannot save objection - Supabase not initialized');
       return;
@@ -1145,7 +1296,7 @@ const BDDashboard = () => {
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 1500);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving objection:', error);
       setSaveStatus('error');
       setTabErrors(prev => ({
@@ -1160,7 +1311,7 @@ const BDDashboard = () => {
   };
 
   // Delete an objection from state and Supabase
-  const handleObjectionDelete = async (index) => {
+  const handleObjectionDelete = async (index: number) => {
     if (!supabase) {
       console.error('Cannot delete objection - Supabase not initialized');
       return;
@@ -1188,7 +1339,7 @@ const BDDashboard = () => {
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 1500);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting objection:', error);
       setSaveStatus('error');
       setTabErrors(prev => ({
@@ -1207,7 +1358,7 @@ const BDDashboard = () => {
   // ==============================================
   
   // Toggle edit mode for a membership
-  const handleMembershipEdit = (index) => {
+  const handleMembershipEdit = (index: number) => {
     console.log('Editing membership at index:', index);
     setMemberships(prev => 
       prev.map((mem, i) => 
@@ -1217,7 +1368,7 @@ const BDDashboard = () => {
   };
 
   // Update a membership field while editing
-  const handleMembershipChange = (index, field, value) => {
+  const handleMembershipChange = (index: number, field: keyof Membership, value: string | number) => {
     setMemberships(prev => 
       prev.map((mem, i) => 
         i === index ? { ...mem, [field]: value } : mem
@@ -1226,7 +1377,7 @@ const BDDashboard = () => {
   };
 
   // Save a membership to state and Supabase
-  const handleMembershipSave = async (membership, isNew = false) => {
+  const handleMembershipSave = async (membership: Membership, isNew = false) => {
     if (!supabase) {
       console.error('Cannot save membership - Supabase not initialized');
       return;
@@ -1297,7 +1448,7 @@ const BDDashboard = () => {
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 1500);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving membership:', error);
       setSaveStatus('error');
       setTabErrors(prev => ({
@@ -1312,7 +1463,7 @@ const BDDashboard = () => {
   };
 
   // Delete a membership from state and Supabase
-  const handleMembershipDelete = async (index) => {
+  const handleMembershipDelete = async (index: number) => {
     if (!supabase) {
       console.error('Cannot delete membership - Supabase not initialized');
       return;
@@ -1340,7 +1491,7 @@ const BDDashboard = () => {
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 1500);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting membership:', error);
       setSaveStatus('error');
       setTabErrors(prev => ({
@@ -1656,7 +1807,7 @@ const BDDashboard = () => {
               }));
             }
           }
-        } catch (vtoError) {
+        } catch (vtoError: any) {
           console.error('Error saving VTO data:', vtoError);
           throw vtoError;
         }
@@ -1789,7 +1940,7 @@ const BDDashboard = () => {
               }
             }
           }
-        } catch (presentationsError) {
+        } catch (presentationsError: any) {
           console.error('Error saving Presentations data:', presentationsError);
           throw presentationsError;
         }
@@ -1841,7 +1992,7 @@ const BDDashboard = () => {
               }
             }
           }
-        } catch (membershipsError) {
+        } catch (membershipsError: any) {
           console.error('Error saving Memberships data:', membershipsError);
           throw membershipsError;
         }
@@ -1895,7 +2046,7 @@ const BDDashboard = () => {
               }
             }
           }
-        } catch (targetsError) {
+        } catch (targetsError: any) {
           console.error('Error saving Targets data:', targetsError);
           throw targetsError;
         }
@@ -1904,7 +2055,7 @@ const BDDashboard = () => {
       console.log(`Successfully saved ${activeTab} data`);
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 3000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving data:', error);
       setSaveStatus('error');
       setTabErrors(prev => ({
@@ -1921,7 +2072,7 @@ const BDDashboard = () => {
   };
 
   // Save yearly goals separately
-  const saveYearlyGoals = async (currentRevenueStr, currentRetentionStr) => {
+  const saveYearlyGoals = async (currentRevenueStr?: string, currentRetentionStr?: string) => {
     if (!supabase) return;
     
     setSaveStatus('saving');
@@ -1979,7 +2130,7 @@ const BDDashboard = () => {
       
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 1500);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving yearly goals:', error);
       setSaveStatus('error');
       setTabErrors(prev => ({
@@ -1994,7 +2145,7 @@ const BDDashboard = () => {
   };
 
   // Save target (for immediate updates to the targets list)
-  const saveTarget = async (updateFn) => {
+  const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
     const updatedTargets = updateFn([...targets]);
     setTargets(updatedTargets);
     setSaveStatus('saving');
@@ -2078,7 +2229,7 @@ const BDDashboard = () => {
       
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 1500);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving target:', error);
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 1500);
@@ -3142,7 +3293,7 @@ return (
             <span className="text-2xl font-bold">
               {Math.round(
                 (memberships.reduce((sum, m) => sum + m.meetingsAttended, 0) / 
-                 memberships.reduce((sum, m) => sum + m.totalMeetings, 0)) * 100
+                 memberships.reduce((sum, m) => sum + m.totalMeetings, 1)) * 100
               )}
             </span>
             <span className="text-gray-600">%</span>
@@ -3162,7 +3313,7 @@ return (
                         className="bg-red-600 hover:bg-red-700 text-white"
                         onClick={() => {
                           const newCompanyId = `company-${Date.now()}`;
-                          const newTarget = {
+                          const newTarget: Target = {
                             id: Date.now().toString(),
                             company_id: newCompanyId,
                             company: "New Company",
@@ -3170,6 +3321,8 @@ return (
                             contact_title: "Position",
                             contact_email: "",
                             properties: "Properties we currently maintain",
+                            sales_rep: "",
+                            sales_rep_name: "",
                             notes: "New prospect notes",
                             created_at: new Date().toISOString(),
                             projected_value: "0"
@@ -3186,7 +3339,14 @@ return (
                       {/* Group targets by company */}
                       {(() => {
                         // Create a map of companies and their contacts
-                        const companiesMap = {};
+                        const companiesMap: {[key: string]: {
+                          company: string;
+                          contacts: {id: string; name: string; title: string; email: string}[];
+                          properties: string;
+                          projected_value: string;
+                          notes: string;
+                          id: string;
+                        }} = {};
                         
                         // Group targets by company
                         targets.forEach(target => {
@@ -3247,13 +3407,15 @@ return (
                                   className="bg-blue-50 text-blue-600 hover:bg-blue-100"
                                   onClick={() => {
                                     // Add a new contact to this company
-                                    const newContact = {
+                                    const newContact: Target = {
                                       id: Date.now().toString(),
                                       company: company.company,
                                       contact_name: "New Contact",
                                       contact_title: "Position",
                                       contact_email: "",
                                       properties: company.properties,
+                                      sales_rep: "",
+                                      sales_rep_name: "",
                                       notes: company.notes,
                                       created_at: new Date().toISOString(),
                                       projected_value: company.projected_value

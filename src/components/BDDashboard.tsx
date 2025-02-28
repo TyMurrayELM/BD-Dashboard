@@ -275,7 +275,7 @@ const useSupabase = () => {
         }
         return false;
       } else {
-        console.log('Database connection test successful');
+        console.log('Database connection test successful - skipping write permission test for now');
         setConnectionError(null);
         return true;
       }
@@ -403,6 +403,38 @@ const useSupabase = () => {
           created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
+
+        -- Add row level security policy for public access
+        ALTER TABLE level10_meetings ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE yearly_goals ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE issues_list ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE quarterly_rocks ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE meeting_guidelines ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE objection_handling ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE quick_tips ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE association_memberships ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE targets ENABLE ROW LEVEL SECURITY;
+
+        -- Create permissive policy for all tables
+        DO $$
+        DECLARE
+          t text;
+        BEGIN
+          FOR t IN 
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+              AND table_name IN (
+                'level10_meetings', 'yearly_goals', 'issues_list', 
+                'quarterly_rocks', 'meeting_guidelines', 'objection_handling', 
+                'quick_tips', 'association_memberships', 'targets'
+              )
+          LOOP
+            EXECUTE format('DROP POLICY IF EXISTS policy_all ON %I', t);
+            EXECUTE format('CREATE POLICY policy_all ON %I USING (true) WITH CHECK (true)', t);
+          END LOOP;
+        END;
+        $$;
       `;
       
       const { error } = await supabase.rpc('exec_sql', { sql: setupSQL });
@@ -2111,55 +2143,93 @@ const BDDashboard = () => {
         try {
           console.log('Saving targets data:', targets);
           for (const target of targets) {
-            const targetData = {
-              contact_name: target.contact_name,
-              contact_title: target.contact_title,
-              contact_email: target.contact_email,
-              company: target.company,
-              properties: target.properties,
-              sales_rep: target.sales_rep,
-              sales_rep_name: target.sales_rep_name,
-              notes: target.notes,
-              status: target.status || 'active',
-              projected_value: target.projected_value,
-              updated_at: new Date().toISOString()
-            };
+            // Validate required fields
+            if (!target.company) {
+              throw new Error(`Target missing required field: company`);
+            }
             
-            if (!target.id || target.id.includes('-')) {
-              console.log('Inserting new target');
-              const { data, error } = await supabase
-                .from('targets')
-                .insert(targetData)
-                .select();
+            try {
+              // For existing targets (with valid UUIDs)
+              if (target.id && !target.id.includes('-') && !isNaN(Date.parse(target.id))) {
+                // Create target data object WITHOUT id field
+                const targetData = {
+                  contact_name: target.contact_name || '',
+                  contact_title: target.contact_title || '',
+                  contact_email: target.contact_email || '',
+                  company: target.company || '',
+                  properties: target.properties || '',
+                  sales_rep: target.sales_rep || '',
+                  sales_rep_name: target.sales_rep_name || '',
+                  notes: target.notes || '',
+                  status: target.status || 'active',
+                  projected_value: target.projected_value || '0',
+                  updated_at: new Date().toISOString()
+                };
                 
-              if (error) {
-                console.error('Error inserting target:', error);
-                throw error;
-              }
-              
-              if (data && data.length > 0) {
-                setTargets((prev: Target[]) => 
-                  prev.map((t: Target) => 
-                    t.id === target.id ? { ...t, id: data[0].id } : t
-                  )
-                );
-              }
-            } else {
-              console.log('Updating existing target:', target.id);
-              const { error } = await supabase
-                .from('targets')
-                .update(targetData)
-                .eq('id', target.id);
+                console.log('Inserting new target:', targetData);
+                const { data, error } = await supabase
+                  .from('targets')
+                  .insert(targetData)
+                  .select();
+                  
+                if (error) {
+                  console.error('Error details from Supabase insert:', error);
+                  throw new Error(`Failed to insert target: ${error.message || error.code || JSON.stringify(error)}`);
+                }
                 
-              if (error) {
-                console.error('Error updating target:', error);
-                throw error;
+                if (data && data.length > 0) {
+                  console.log('Target inserted successfully, received ID:', data[0].id);
+                  setTargets((prev: Target[]) => 
+                    prev.map((t: Target) => 
+                      t.id === target.id ? {...t, id: data[0].id} : t
+                    )
+                  );
+                } else {
+                  console.warn('Insert succeeded but no data returned from Supabase');
+                }
+              } else if (target.id) {
+                // This is an existing target with a valid UUID
+                const targetData = {
+                  contact_name: target.contact_name || '',
+                  contact_title: target.contact_title || '',
+                  contact_email: target.contact_email || '',
+                  company: target.company || '',
+                  properties: target.properties || '',
+                  sales_rep: target.sales_rep || '',
+                  sales_rep_name: target.sales_rep_name || '',
+                  notes: target.notes || '',
+                  status: target.status || 'active',
+                  projected_value: target.projected_value || '0',
+                  updated_at: new Date().toISOString()
+                };
+                
+                console.log('Updating existing target:', target.id, targetData);
+                const { error } = await supabase
+                  .from('targets')
+                  .update(targetData)
+                  .eq('id', target.id);
+                  
+                if (error) {
+                  console.error('Error details from Supabase update:', error);
+                  throw new Error(`Failed to update target: ${error.message || error.code || JSON.stringify(error)}`);
+                }
               }
+            } catch (operationError) {
+              console.error(`Operation failed for target ${target.id}:`, operationError);
+              throw operationError;
             }
           }
         } catch (targetsError: any) {
-          console.error('Error saving Targets data:', targetsError);
-          throw targetsError;
+          console.error('Error saving Targets data:', 
+            targetsError.message || targetsError.details || JSON.stringify(targetsError));
+          setTabErrors((prev: TabErrors) => ({
+            ...prev,
+            targetList: {
+              message: 'Failed to save targets data',
+              details: targetsError.message || JSON.stringify(targetsError)
+            }
+          }));
+          throw new Error(`Error saving Targets data: ${targetsError.message || JSON.stringify(targetsError)}`);
         }
       }
       
@@ -2168,11 +2238,33 @@ const BDDashboard = () => {
       setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (error: any) {
       console.error('Error saving data:', error);
+      
+      // Extract more detailed error information
+      let errorDetails = '';
+      if (error) {
+        if (error.message) {
+          errorDetails = error.message;
+        } else if (error.details) {
+          errorDetails = typeof error.details === 'string' ? error.details : JSON.stringify(error.details);
+        } else if (error.code) {
+          errorDetails = `Error code: ${error.code}`;
+        } else if (typeof error === 'object') {
+          errorDetails = JSON.stringify(error);
+        } else {
+          errorDetails = String(error);
+        }
+      }
+      
+      // If we've got an empty object as a string, provide more context
+      if (errorDetails === '{}') {
+        errorDetails = 'Empty error object returned from Supabase. Check your database permissions and schema.';
+      }
+      
       setSaveStatus('error');
       setTabErrors((prev: TabErrors) => ({
         ...prev,
         [activeTab]: {
-          message: `Failed to save ${activeTab} data`,
+          message: `Failed to save ${activeTab} data: ${errorDetails}`,
           details: error
         }
       }));
@@ -2258,18 +2350,15 @@ const BDDashboard = () => {
 
   // Save target (for immediate updates to the targets list)
   const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
-    const updatedTargets = updateFn([...targets]);
-    setTargets(updatedTargets);
-    setSaveStatus('saving');
-    
-    if (!supabase) {
-      console.error('Cannot save target - Supabase client not initialized');
-      setSaveStatus('error');
-      setTimeout(() => setSaveStatus('idle'), 1500);
-      return;
-    }
-    
     try {
+      const updatedTargets = updateFn([...targets]);
+      setTargets(updatedTargets);
+      setSaveStatus('saving');
+      
+      if (!supabase) {
+        throw new Error('Supabase client not initialized');
+      }
+      
       const changedTargets = updatedTargets.filter((newTarget: Target) => {
         const oldTarget = targets.find((t: Target) => t.id === newTarget.id);
         if (!oldTarget) return true;
@@ -2286,40 +2375,78 @@ const BDDashboard = () => {
       console.log('Saving changed targets:', changedTargets);
       
       for (const target of changedTargets) {
-        const targetData = {
-          contact_name: target.contact_name,
-          contact_title: target.contact_title,
-          contact_email: target.contact_email || '',
-          company: target.company,
-          properties: target.properties,
-          sales_rep: target.sales_rep,
-          sales_rep_name: target.sales_rep_name,
-          notes: target.notes,
-          status: target.status || 'active',
-          projected_value: target.projected_value,
-          updated_at: new Date().toISOString()
-        };
+        // Validate required fields before saving
+        if (!target.company) {
+          throw new Error('Company name is required');
+        }
         
-        if (!target.id || target.id.includes('-')) {
-          console.log('Inserting new target');
-          const { data, error } = await supabase
-            .from('targets')
-            .insert(targetData)
-            .select();
+        try {
+          // CHECK IF THIS IS A NEW TARGET (with timestamp-based ID)
+          if (!target.id || target.id.includes('-') || !isNaN(Date.parse(target.id))) {
+            // Create target data without ID for insertion
+            const targetData = {
+              contact_name: target.contact_name || '',
+              contact_title: target.contact_title || '',
+              contact_email: target.contact_email || '',
+              company: target.company || '',
+              properties: target.properties || '',
+              sales_rep: target.sales_rep || '',
+              sales_rep_name: target.sales_rep_name || '',
+              notes: target.notes || '',
+              status: target.status || 'active',
+              projected_value: target.projected_value || '0',
+              updated_at: new Date().toISOString()
+            };
             
-          if (error) throw error;
-          
-          if (data && data.length > 0) {
-            setTargets((prev: Target[]) => prev.map((t: Target) => t.id === target.id ? {...t, id: data[0].id} : t));
+            console.log('Inserting new target:', targetData);
+            const { data, error } = await supabase
+              .from('targets')
+              .insert(targetData)
+              .select();
+              
+            if (error) {
+              console.error('Error details from Supabase:', error);
+              throw new Error(`Failed to insert target: ${error.message || error.code || JSON.stringify(error)}`);
+            }
+            
+            if (data && data.length > 0) {
+              console.log('Target inserted successfully, received ID:', data[0].id);
+              setTargets((prev: Target[]) => prev.map((t: Target) => 
+                t.id === target.id ? {...t, id: data[0].id} : t
+              ));
+            } else {
+              console.warn('Insert succeeded but no data returned from Supabase');
+            }
+          } else {
+            // This is an existing target with a valid UUID
+            const targetData = {
+              contact_name: target.contact_name || '',
+              contact_title: target.contact_title || '',
+              contact_email: target.contact_email || '',
+              company: target.company || '',
+              properties: target.properties || '',
+              sales_rep: target.sales_rep || '',
+              sales_rep_name: target.sales_rep_name || '',
+              notes: target.notes || '',
+              status: target.status || 'active',
+              projected_value: target.projected_value || '0',
+              updated_at: new Date().toISOString()
+            };
+            
+            console.log('Updating existing target:', target.id, targetData);
+            const { error } = await supabase
+              .from('targets')
+              .update(targetData)
+              .eq('id', target.id);
+              
+            if (error) {
+              console.error('Error details from Supabase:', error);
+              throw new Error(`Failed to update target: ${error.message || error.code || JSON.stringify(error)}`);
+            }
           }
-        } else {
-          console.log('Updating existing target:', target.id);
-          const { error } = await supabase
-            .from('targets')
-            .update(targetData)
-            .eq('id', target.id);
-            
-          if (error) throw error;
+        } catch (operationError) {
+          console.error('Target operation failed:', operationError);
+          throw operationError;
         }
       }
       
@@ -2328,28 +2455,38 @@ const BDDashboard = () => {
       );
       
       for (const target of deletedTargets) {
-        if (target.id && !target.id.includes('-')) {
-          console.log('Deleting target:', target.id);
-          const { error } = await supabase
-            .from('targets')
-            .delete()
-            .eq('id', target.id);
-            
-          if (error) throw error;
+        // Only delete if it's a real database record (not a temporary one)
+        if (target.id && !target.id.includes('-') && isNaN(Date.parse(target.id))) {
+          try {
+            console.log('Deleting target:', target.id);
+            const { error } = await supabase
+              .from('targets')
+              .delete()
+              .eq('id', target.id);
+              
+            if (error) {
+              console.error('Error details from Supabase:', error);
+              throw new Error(`Failed to delete target: ${error.message || error.code || JSON.stringify(error)}`);
+            }
+          } catch (deleteError) {
+            console.error('Target deletion failed:', deleteError);
+            throw deleteError;
+          }
         }
       }
       
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 1500);
     } catch (error: any) {
-      console.error('Error saving target:', error);
+      const errorMessage = error.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
+      console.error('Error saving target:', errorMessage);
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 1500);
       setTabErrors((prev: TabErrors) => ({
         ...prev,
         targetList: {
           message: 'Failed to save target',
-          details: error
+          details: errorMessage
         }
       }));
     }
@@ -2395,798 +2532,968 @@ const BDDashboard = () => {
     return matchesSearch && matchesRep;
   });
 // ========================
-// Render Component - Part 3
-// ========================
-return (
-  <div className="min-h-screen bg-gradient-to-b from-white to-blue-50">
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">BD Meeting Agenda</h1>
-        {!connectionError && (
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <div className="flex items-center border border-gray-200 rounded-md p-2 bg-white">
-                <CalendarIcon className="mr-2 h-4 w-4 text-gray-500" />
-                <select 
-                  className="outline-none border-none bg-transparent pr-8 text-sm font-medium"
-                  value={selectedWeek} 
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleWeekChange(e.target.value)}
-                >
-                  {weekOptions.map((option: WeekOption) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <SaveButton 
-              onClick={saveData}
-              status={saveStatus}
-              disabled={isSaving}
-            />
-          </div>
-        )}
-      </div>
-
-      {connectionError ? (
-        <div className="bg-white rounded-xl p-6 shadow-lg border border-red-200">
-          <div className="flex items-center text-red-600 mb-4">
-            <AlertTriangle className="h-6 w-6 mr-2" />
-            <h2 className="text-xl font-bold">Connection Error</h2>
-          </div>
-          <p className="mb-4">{connectionError}</p>
-          <div className="bg-red-50 p-4 rounded-lg mb-4">
-            <h3 className="font-medium mb-2">Troubleshooting Steps:</h3>
-            {connectionError?.includes('API key') ? (
-              <div>
-                <p className="text-red-800 font-medium mb-2">API Key Issue Detected</p>
-                <ol className="list-decimal ml-5 space-y-1">
-                  <li>Go to your Supabase project dashboard</li>
-                  <li>Navigate to Project Settings {'>'} API</li>
-                  <li>Copy the "anon" public key (not the service_role key)</li>
-                  <li>Update your .env.local file with the correct key</li>
-                  <li>Restart your Next.js development server</li>
-                </ol>
-                <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                  <p className="text-sm text-yellow-800">
-                    <strong>Note:</strong> Make sure your .env.local file contains:
-                    <pre className="mt-1 bg-gray-100 p-2 rounded overflow-x-auto">
-                      NEXT_PUBLIC_SUPABASE_URL=your_project_url<br/>
-                      NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-                    </pre>
-                  </p>
-                  <p className="text-sm text-yellow-800 mt-2">
-                    After updating, you must restart your Next.js server.
-                  </p>
+  // Render Component - Part 3
+  // ========================
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-white to-blue-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">BD Meeting Agenda</h1>
+          {!connectionError && (
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <div className="flex items-center border border-gray-200 rounded-md p-2 bg-white">
+                  <CalendarIcon className="mr-2 h-4 w-4 text-gray-500" />
+                  <select 
+                    className="outline-none border-none bg-transparent pr-8 text-sm font-medium"
+                    value={selectedWeek} 
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleWeekChange(e.target.value)}
+                  >
+                    {weekOptions.map((option: WeekOption) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
-            ) : connectionError?.includes('tables do not exist') ? (
-              <div>
-                <p className="text-red-800 font-medium mb-2">Database Tables Missing</p>
+              <SaveButton 
+                onClick={saveData}
+                status={saveStatus}
+                disabled={isSaving}
+              />
+            </div>
+          )}
+        </div>
+
+        {connectionError ? (
+          <div className="bg-white rounded-xl p-6 shadow-lg border border-red-200">
+            <div className="flex items-center text-red-600 mb-4">
+              <AlertTriangle className="h-6 w-6 mr-2" />
+              <h2 className="text-xl font-bold">Connection Error</h2>
+            </div>
+            <p className="mb-4">{connectionError}</p>
+            <div className="bg-red-50 p-4 rounded-lg mb-4">
+              <h3 className="font-medium mb-2">Troubleshooting Steps:</h3>
+              {connectionError?.includes('API key') ? (
+                <div>
+                  <p className="text-red-800 font-medium mb-2">API Key Issue Detected</p>
+                  <ol className="list-decimal ml-5 space-y-1">
+                    <li>Go to your Supabase project dashboard</li>
+                    <li>Navigate to Project Settings {'>'} API</li>
+                    <li>Copy the "anon" public key (not the service_role key)</li>
+                    <li>Update your .env.local file with the correct key</li>
+                    <li>Restart your Next.js development server</li>
+                  </ol>
+                  <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                    <p className="text-sm text-yellow-800">
+                      <strong>Note:</strong> Make sure your .env.local file contains:
+                      <pre className="mt-1 bg-gray-100 p-2 rounded overflow-x-auto">
+                        NEXT_PUBLIC_SUPABASE_URL=your_project_url<br/>
+                        NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+                      </pre>
+                    </p>
+                    <p className="text-sm text-yellow-800 mt-2">
+                      After updating, you must restart your Next.js server.
+                    </p>
+                  </div>
+                </div>
+              ) : connectionError?.includes('tables do not exist') ? (
+                <div>
+                  <p className="text-red-800 font-medium mb-2">Database Tables Missing</p>
+                  <ol className="list-decimal ml-5 space-y-1">
+                    <li>It appears your database tables are not set up yet</li>
+                    <li>Click the "Create Database Tables" button below to automatically set up the required tables</li>
+                    <li>Alternatively, go to the Supabase SQL Editor and run the SQL setup script manually</li>
+                  </ol>
+                </div>
+              ) : (
                 <ol className="list-decimal ml-5 space-y-1">
-                  <li>It appears your database tables are not set up yet</li>
-                  <li>Click the "Create Database Tables" button below to automatically set up the required tables</li>
-                  <li>Alternatively, go to the Supabase SQL Editor and run the SQL setup script manually</li>
+                  <li>Check that your Supabase project is running</li>
+                  <li>Verify your environment variables are set correctly</li>
+                  <li>Make sure the database tables have been created properly</li>
+                  <li>Check RLS policies if you're using authentication</li>
                 </ol>
-              </div>
-            ) : (
-              <ol className="list-decimal ml-5 space-y-1">
-                <li>Check that your Supabase project is running</li>
-                <li>Verify your environment variables are set correctly</li>
-                <li>Make sure the database tables have been created properly</li>
-                <li>Check RLS policies if you're using authentication</li>
-              </ol>
-            )}
-          </div>
-          <div className="flex gap-4">
-            <Button
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-              onClick={async () => {
-                const success = await checkConnection();
-                if (success) {
-                  alert('Database connection verified successfully!');
-                  fetchData();
-                }
-              }}
-            >
-              Verify Database Access
-            </Button>
-            
-            {connectionError?.includes('tables do not exist') && (
+              )}
+            </div>
+            <div className="flex gap-4">
               <Button
-                className="bg-green-600 hover:bg-green-700 text-white"
+                className="bg-blue-600 hover:bg-blue-700 text-white"
                 onClick={async () => {
-                  setIsLoading(true);
-                  const success = await setupDatabase();
-                  setIsLoading(false);
+                  const success = await checkConnection();
                   if (success) {
-                    alert('Database tables created successfully!');
+                    alert('Database connection verified successfully!');
                     fetchData();
                   }
                 }}
-                disabled={isLoading}
               >
-                {isLoading ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating Tables...</>
-                ) : (
-                  <>Create Database Tables</>
-                )}
+                Verify Database Access
               </Button>
-            )}
+              
+              {connectionError?.includes('tables do not exist') && (
+                <Button
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  onClick={async () => {
+                    setIsLoading(true);
+                    const success = await setupDatabase();
+                    setIsLoading(false);
+                    if (success) {
+                      alert('Database tables created successfully!');
+                      fetchData();
+                    }
+                  }}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating Tables...</>
+                  ) : (
+                    <>Create Database Tables</>
+                  )}
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
-          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-            <TabsList className="w-full flex flex-wrap sm:flex-nowrap gap-2 mb-8 bg-gray-50 p-1 rounded-lg">
-              <TabsTrigger 
-                value="level10" 
-                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all duration-200 ${
-                  activeTab === "level10" 
-                    ? "bg-white shadow-md text-blue-600 border-b-2 border-blue-600 transform scale-[1.02]" 
-                    : "text-gray-600 hover:bg-blue-100 bg-blue-50"
-                }`}
-              >
-                <Building2 className="w-5 h-5" />
-                <span className="font-medium">Level 10 Meeting</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="vto" 
-                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all duration-200 ${
-                  activeTab === "vto" 
-                    ? "bg-white shadow-md text-green-600 border-b-2 border-green-600 transform scale-[1.02]" 
-                    : "text-gray-600 hover:bg-green-100 bg-green-50"
-                }`}
-              >
-                <Users className="w-5 h-5" />
-                <span className="font-medium">Vision Traction</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="presentations" 
-                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all duration-200 ${
-                  activeTab === "presentations" 
-                    ? "bg-white shadow-md text-purple-600 border-b-2 border-purple-600 transform scale-[1.02]" 
-                    : "text-gray-600 hover:bg-purple-100 bg-purple-50"
-                }`}
-              >
-                <Presentation className="w-5 h-5" />
-                <span className="font-medium">Presentations</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="memberships" 
-                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all duration-200 ${
-                  activeTab === "memberships" 
-                    ? "bg-white shadow-md text-orange-600 border-b-2 border-orange-600 transform scale-[1.02]" 
-                    : "text-gray-600 hover:bg-orange-100 bg-orange-50"
-                }`}
-              >
-                <Users2 className="w-5 h-5" />
-                <span className="font-medium">Memberships</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="targetList" 
-                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all duration-200 ${
-                  activeTab === "targetList" 
-                    ? "bg-white shadow-md text-red-600 border-b-2 border-red-600 transform scale-[1.02]" 
-                    : "text-gray-600 hover:bg-red-100 bg-red-50"
-                }`}
-              >
-                <Target className="w-5 h-5" />
-                <span className="font-medium">Target List</span>
-              </TabsTrigger>
-            </TabsList>
+        ) : (
+          <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-100">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+              <TabsList className="w-full flex flex-wrap sm:flex-nowrap gap-2 mb-8 bg-gray-50 p-1 rounded-lg">
+                <TabsTrigger 
+                  value="level10" 
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all duration-200 ${
+                    activeTab === "level10" 
+                      ? "bg-white shadow-md text-blue-600 border-b-2 border-blue-600 transform scale-[1.02]" 
+                      : "text-gray-600 hover:bg-blue-100 bg-blue-50"
+                  }`}
+                >
+                  <Building2 className="w-5 h-5" />
+                  <span className="font-medium">Level 10 Meeting</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="vto" 
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all duration-200 ${
+                    activeTab === "vto" 
+                      ? "bg-white shadow-md text-green-600 border-b-2 border-green-600 transform scale-[1.02]" 
+                      : "text-gray-600 hover:bg-green-100 bg-green-50"
+                  }`}
+                >
+                  <Users className="w-5 h-5" />
+                  <span className="font-medium">Vision Traction</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="presentations" 
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all duration-200 ${
+                    activeTab === "presentations" 
+                      ? "bg-white shadow-md text-purple-600 border-b-2 border-purple-600 transform scale-[1.02]" 
+                      : "text-gray-600 hover:bg-purple-100 bg-purple-50"
+                  }`}
+                >
+                  <Presentation className="w-5 h-5" />
+                  <span className="font-medium">Presentations</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="memberships" 
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all duration-200 ${
+                    activeTab === "memberships" 
+                      ? "bg-white shadow-md text-orange-600 border-b-2 border-orange-600 transform scale-[1.02]" 
+                      : "text-gray-600 hover:bg-orange-100 bg-orange-50"
+                  }`}
+                >
+                  <Users2 className="w-5 h-5" />
+                  <span className="font-medium">Memberships</span>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="targetList" 
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all duration-200 ${
+                    activeTab === "targetList" 
+                      ? "bg-white shadow-md text-red-600 border-b-2 border-red-600 transform scale-[1.02]" 
+                      : "text-gray-600 hover:bg-red-100 bg-red-50"
+                  }`}
+                >
+                  <Target className="w-5 h-5" />
+                  <span className="font-medium">Target List</span>
+                </TabsTrigger>
+              </TabsList>
 
-            {/* Tab Content */}
-            {isLoading ? (
-              <LoadingIndicator message={`Loading ${activeTab} data...`} />
-            ) : tabErrors[activeTab] ? (
-              <ErrorCard 
-                title={`Error in ${activeTab} tab`} 
-                error={tabErrors[activeTab]} 
-                onRetry={() => fetchData()} 
-              />
-            ) : (
-              <>
-                {/* Level 10 Meeting Tab - UPDATED with Hot Properties and Terminations */}
-                <TabsContent value="level10">
-                  <div className="space-y-6">
-                    <div className="flex items-center border-b border-blue-100 pb-4 mb-2">
-                      <Building2 className="h-7 w-7 text-blue-600 mr-3" />
-                      <h2 className="text-xl font-bold text-gray-800">Level 10 Meeting <span className="text-blue-600">Tracker</span></h2>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                      <div className="bg-gradient-to-r from-blue-50 to-white rounded-xl p-6 border border-blue-100 shadow-sm">
-                        <div className="flex items-center mb-4">
-                          <div className="h-8 w-1 bg-blue-500 rounded-full mr-3"></div>
-                          <h3 className="text-sm font-medium text-gray-700">Week Range</h3>
-                        </div>
-                        <p className="font-medium text-blue-800">{selectedWeek ? weekOptions.find((opt: WeekOption) => opt.value === selectedWeek)?.label : 'Current Week'}</p>
+              {/* Tab Content */}
+              {isLoading ? (
+                <LoadingIndicator message={`Loading ${activeTab} data...`} />
+              ) : tabErrors[activeTab] ? (
+                <ErrorCard 
+                  title={`Error in ${activeTab} tab`} 
+                  error={tabErrors[activeTab]} 
+                  onRetry={() => fetchData()} 
+                />
+              ) : (
+                <>
+                  {/* Level 10 Meeting Tab - UPDATED with Hot Properties and Terminations */}
+                  <TabsContent value="level10">
+                    <div className="space-y-6">
+                      <div className="flex items-center border-b border-blue-100 pb-4 mb-2">
+                        <Building2 className="h-7 w-7 text-blue-600 mr-3" />
+                        <h2 className="text-xl font-bold text-gray-800">Level 10 Meeting <span className="text-blue-600">Tracker</span></h2>
                       </div>
                       
-                      <div className="bg-gradient-to-r from-indigo-50 to-white rounded-xl p-6 border border-indigo-100 shadow-sm">
-                        <FormField
-                          label="Attendees"
-                          name="attendees"
-                          value={formData.attendees}
-                          onChange={handleInputChange}
-                          placeholder="Enter attendees"
-                        />
-                      </div>
-                      
-                      <div className="bg-gradient-to-r from-sky-50 to-white rounded-xl p-6 border border-sky-100 shadow-sm">
-                        <FormField
-                          label="Safety Message"
-                          name="safetyMessage"
-                          value={formData.safetyMessage}
-                          onChange={handleInputChange}
-                          placeholder="Enter safety message of the week"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="bg-gradient-to-r from-blue-50 via-white to-blue-50 rounded-xl p-6 border border-blue-100 shadow-sm">
-                      <div className="mb-4 flex items-center">
-                        <div className="h-2 w-2 bg-blue-600 rounded-full mr-2"></div>
-                        <h3 className="text-lg font-medium text-blue-600">EnCore Values/Sales Story</h3>
-                      </div>
-                      <FormField
-                        label=""
-                        name="encoreValues"
-                        value={formData.encoreValues}
-                        onChange={handleInputChange}
-                        placeholder="Share success story or learning experience"
-                        isTextArea
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      <div className="space-y-6">
-                        <div className="bg-gradient-to-br from-green-50 to-white rounded-xl p-6 border border-green-100 shadow-sm hover:shadow-md transition-shadow">
-                          <div className="mb-4 flex items-center">
-                            <div className="h-2 w-2 bg-green-600 rounded-full mr-2"></div>
-                            <h3 className="text-lg font-medium text-green-700">What We're Closing <span className="text-sm font-normal text-gray-500">(10 minutes)</span></h3>
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="bg-gradient-to-r from-blue-50 to-white rounded-xl p-6 border border-blue-100 shadow-sm">
+                          <div className="flex items-center mb-4">
+                            <div className="h-8 w-1 bg-blue-500 rounded-full mr-3"></div>
+                            <h3 className="text-sm font-medium text-gray-700">Week Range</h3>
                           </div>
-                          <FormField
-                            label=""
-                            name="closingDeals"
-                            value={formData.closingDeals}
-                            onChange={handleInputChange}
-                            placeholder="Update on deals close to signing"
-                            isTextArea
-                          />
+                          <p className="font-medium text-blue-800">{selectedWeek ? weekOptions.find((opt: WeekOption) => opt.value === selectedWeek)?.label : 'Current Week'}</p>
                         </div>
-
-                        <div className="bg-gradient-to-br from-yellow-50 to-white rounded-xl p-6 border border-yellow-100 shadow-sm hover:shadow-md transition-shadow">
-                          <div className="mb-4 flex items-center">
-                            <div className="h-2 w-2 bg-yellow-600 rounded-full mr-2"></div>
-                            <h3 className="text-lg font-medium text-yellow-700">Hot Properties</h3>
-                          </div>
+                        
+                        <div className="bg-gradient-to-r from-indigo-50 to-white rounded-xl p-6 border border-indigo-100 shadow-sm">
                           <FormField
-                            label=""
-                            name="hotProperties"
-                            value={formData.hotProperties || ''}
+                            label="Attendees"
+                            name="attendees"
+                            value={formData.attendees}
                             onChange={handleInputChange}
-                            placeholder="Properties with high potential or activity"
-                            isTextArea
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-6">
-                        <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-6 border border-blue-100 shadow-sm hover:shadow-md transition-shadow">
-                          <div className="mb-4 flex items-center">
-                            <div className="h-2 w-2 bg-blue-600 rounded-full mr-2"></div>
-                            <h3 className="text-lg font-medium text-blue-700">What We're Bidding <span className="text-sm font-normal text-gray-500">(20 minutes)</span></h3>
-                          </div>
-                          <FormField
-                            label=""
-                            name="biddingDeals"
-                            value={formData.biddingDeals}
-                            onChange={handleInputChange}
-                            placeholder="Current bid status and updates"
-                            isTextArea
+                            placeholder="Enter attendees"
                           />
                         </div>
                         
-                        <div className="bg-gradient-to-br from-red-50 to-white rounded-xl p-6 border border-red-100 shadow-sm hover:shadow-md transition-shadow">
-                          <div className="mb-4 flex items-center">
-                            <div className="h-2 w-2 bg-red-600 rounded-full mr-2"></div>
-                            <h3 className="text-lg font-medium text-red-700">Terminations/Ownership Changes</h3>
-                          </div>
+                        <div className="bg-gradient-to-r from-sky-50 to-white rounded-xl p-6 border border-sky-100 shadow-sm">
                           <FormField
-                            label=""
-                            name="terminationChanges"
-                            value={formData.terminationChanges || ''}
+                            label="Safety Message"
+                            name="safetyMessage"
+                            value={formData.safetyMessage}
                             onChange={handleInputChange}
-                            placeholder="Account terminations or ownership changes to monitor"
-                            isTextArea
+                            placeholder="Enter safety message of the week"
                           />
                         </div>
                       </div>
-                    </div>
-                  </div>
-                </TabsContent>
 
-                {/* Vision Traction Organizer Tab */}
-                <TabsContent value="vto" className="space-y-6">
-                  {/* Yearly Goals Section with Current Metrics */}
-                  <div className="bg-green-50 p-6 rounded-xl border border-green-200">
-                    <div className="flex justify-between items-center mb-4">
-                      <SectionHeader title={`${yearlyGoals.year} Yearly Goals`} />
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        className="border-green-500 text-green-600 hover:bg-green-50"
-                        onClick={handleMetricsUpdate}
-                      >
-                        Update Metrics
-                      </Button>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="bg-white p-6 rounded-xl border border-green-100 transition-all duration-200 hover:shadow-md">
-                        <div className="text-sm text-gray-600 mb-2">Revenue</div>
-                        <div className="flex justify-between">
-                          <div>
-                            <div className="text-sm font-medium text-gray-500">TARGET</div>
-                            <div className="text-3xl font-bold text-green-700">${yearlyGoals.revenueTarget}M</div>
-                            <div className="text-sm text-gray-600 mt-1">{yearlyGoals.revenueDescription}</div>
-                          </div>
-                          <div className="border-l border-gray-200 pl-4">
-                            <div className="text-sm font-medium text-gray-500">CURRENT</div>
-                            <input 
-                              type="text"
-                              className="text-3xl font-bold text-blue-600 bg-transparent border-b border-dashed border-blue-200 w-24 focus:outline-none focus:border-blue-500"
-                              value={`${yearlyGoals.currentRevenue}M`}
-                              onChange={handleCurrentRevenueChange}
-                              aria-label="Current Revenue"
+                      <div className="bg-gradient-to-r from-blue-50 via-white to-blue-50 rounded-xl p-6 border border-blue-100 shadow-sm">
+                        <div className="mb-4 flex items-center">
+                          <div className="h-2 w-2 bg-blue-600 rounded-full mr-2"></div>
+                          <h3 className="text-lg font-medium text-blue-600">EnCore Values/Sales Story</h3>
+                        </div>
+                        <FormField
+                          label=""
+                          name="encoreValues"
+                          value={formData.encoreValues}
+                          onChange={handleInputChange}
+                          placeholder="Share success story or learning experience"
+                          isTextArea
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="space-y-6">
+                          <div className="bg-gradient-to-br from-green-50 to-white rounded-xl p-6 border border-green-100 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="mb-4 flex items-center">
+                              <div className="h-2 w-2 bg-green-600 rounded-full mr-2"></div>
+                              <h3 className="text-lg font-medium text-green-700">What We're Closing <span className="text-sm font-normal text-gray-500">(10 minutes)</span></h3>
+                            </div>
+                            <FormField
+                              label=""
+                              name="closingDeals"
+                              value={formData.closingDeals}
+                              onChange={handleInputChange}
+                              placeholder="Update on deals close to signing"
+                              isTextArea
                             />
-                            <div className="text-sm text-gray-600 mt-1">
-                              <span className="text-blue-600 font-medium">87.7%</span> of target
+                          </div>
+
+                          <div className="bg-gradient-to-br from-yellow-50 to-white rounded-xl p-6 border border-yellow-100 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="mb-4 flex items-center">
+                              <div className="h-2 w-2 bg-yellow-600 rounded-full mr-2"></div>
+                              <h3 className="text-lg font-medium text-yellow-700">Hot Properties</h3>
+                            </div>
+                            <FormField
+                              label=""
+                              name="hotProperties"
+                              value={formData.hotProperties || ''}
+                              onChange={handleInputChange}
+                              placeholder="Properties with high potential or activity"
+                              isTextArea
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-6">
+                          <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-6 border border-blue-100 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="mb-4 flex items-center">
+                              <div className="h-2 w-2 bg-blue-600 rounded-full mr-2"></div>
+                              <h3 className="text-lg font-medium text-blue-700">What We're Bidding <span className="text-sm font-normal text-gray-500">(20 minutes)</span></h3>
+                            </div>
+                            <FormField
+                              label=""
+                              name="biddingDeals"
+                              value={formData.biddingDeals}
+                              onChange={handleInputChange}
+                              placeholder="Current bid status and updates"
+                              isTextArea
+                            />
+                          </div>
+                          
+                          <div className="bg-gradient-to-br from-red-50 to-white rounded-xl p-6 border border-red-100 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="mb-4 flex items-center">
+                              <div className="h-2 w-2 bg-red-600 rounded-full mr-2"></div>
+                              <h3 className="text-lg font-medium text-red-700">Terminations/Ownership Changes</h3>
+                            </div>
+                            <FormField
+                              label=""
+                              name="terminationChanges"
+                              value={formData.terminationChanges || ''}
+                              onChange={handleInputChange}
+                              placeholder="Account terminations or ownership changes to monitor"
+                              isTextArea
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  {/* Vision Traction Organizer Tab */}
+                  <TabsContent value="vto" className="space-y-6">
+                    {/* Yearly Goals Section with Current Metrics */}
+                    <div className="bg-green-50 p-6 rounded-xl border border-green-200">
+                      <div className="flex justify-between items-center mb-4">
+                        <SectionHeader title={`${yearlyGoals.year} Yearly Goals`} />
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="border-green-500 text-green-600 hover:bg-green-50"
+                          onClick={handleMetricsUpdate}
+                        >
+                          Update Metrics
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="bg-white p-6 rounded-xl border border-green-100 transition-all duration-200 hover:shadow-md">
+                          <div className="text-sm text-gray-600 mb-2">Revenue</div>
+                          <div className="flex justify-between">
+                            <div>
+                              <div className="text-sm font-medium text-gray-500">TARGET</div>
+                              <div className="text-3xl font-bold text-green-700">${yearlyGoals.revenueTarget}M</div>
+                              <div className="text-sm text-gray-600 mt-1">{yearlyGoals.revenueDescription}</div>
+                            </div>
+                            <div className="border-l border-gray-200 pl-4">
+                              <div className="text-sm font-medium text-gray-500">CURRENT</div>
+                              <input 
+                                type="text"
+                                className="text-3xl font-bold text-blue-600 bg-transparent border-b border-dashed border-blue-200 w-24 focus:outline-none focus:border-blue-500"
+                                value={`${yearlyGoals.currentRevenue}M`}
+                                onChange={handleCurrentRevenueChange}
+                                aria-label="Current Revenue"
+                              />
+                              <div className="text-sm text-gray-600 mt-1">
+                                <span className="text-blue-600 font-medium">87.7%</span> of target
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="bg-white p-6 rounded-xl border border-green-100 transition-all duration-200 hover:shadow-md">
+                          <div className="text-sm text-gray-600 mb-2">Retention</div>
+                          <div className="flex justify-between">
+                            <div>
+                              <div className="text-sm font-medium text-gray-500">TARGET</div>
+                              <div className="text-3xl font-bold text-green-700">{yearlyGoals.retentionGoal}%</div>
+                              <div className="text-sm text-gray-600 mt-1">{yearlyGoals.retentionDescription}</div>
+                            </div>
+                            <div className="border-l border-gray-200 pl-4">
+                              <div className="text-sm font-medium text-gray-500">CURRENT</div>
+                              <input 
+                                type="text"
+                                className="text-3xl font-bold text-blue-600 bg-transparent border-b border-dashed border-blue-200 w-16 focus:outline-none focus:border-blue-500"
+                                value={`${yearlyGoals.currentRetention}%`}
+                                onChange={handleCurrentRetentionChange}
+                                aria-label="Current Retention"
+                              />
+                              <div className="text-sm text-gray-600 mt-1">
+                                <span className="text-amber-600 font-medium">-2%</span> vs target
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
-                      <div className="bg-white p-6 rounded-xl border border-green-100 transition-all duration-200 hover:shadow-md">
-                        <div className="text-sm text-gray-600 mb-2">Retention</div>
-                        <div className="flex justify-between">
-                          <div>
-                            <div className="text-sm font-medium text-gray-500">TARGET</div>
-                            <div className="text-3xl font-bold text-green-700">{yearlyGoals.retentionGoal}%</div>
-                            <div className="text-sm text-gray-600 mt-1">{yearlyGoals.retentionDescription}</div>
-                          </div>
-                          <div className="border-l border-gray-200 pl-4">
-                            <div className="text-sm font-medium text-gray-500">CURRENT</div>
-                            <input 
-                              type="text"
-                              className="text-3xl font-bold text-blue-600 bg-transparent border-b border-dashed border-blue-200 w-16 focus:outline-none focus:border-blue-500"
-                              value={`${yearlyGoals.currentRetention}%`}
-                              onChange={handleCurrentRetentionChange}
-                              aria-label="Current Retention"
-                            />
-                            <div className="text-sm text-gray-600 mt-1">
-                              <span className="text-amber-600 font-medium">-2%</span> vs target
-                            </div>
-                          </div>
-                        </div>
-                      </div>
                     </div>
-                  </div>
-                  
-                  {/* Issues List */}
-                  <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                    <SectionHeader title="Issues List" />
-                    <div className="space-y-4">
-                      {issuesList.map((issue: Issue, index: number) => (
-                        <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-all duration-200 hover:bg-gray-100">
-                          <input 
-                            type="checkbox" 
-                            checked={issue.isCompleted}
-                            onChange={() => {
-                              const newList = [...issuesList];
-                              newList[index].isCompleted = !issue.isCompleted;
-                              setIssuesList(newList);
-                            }}
-                            className="w-5 h-5 rounded border-gray-300" 
-                          />
-                          <input
-                            type="text"
-                            className={`flex-1 bg-transparent border-0 focus:ring-0 ${issue.isCompleted ? 'line-through text-gray-400' : 'text-gray-700'}`}
-                            defaultValue={issue.issueText}
-                            onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
-                              const newList = [...issuesList];
-                              newList[index].issueText = e.target.value;
-                              setIssuesList(newList);
-                            }}
-                          />
-                          <div className="flex items-center gap-2">
+                    
+                    {/* Issues List */}
+                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                      <SectionHeader title="Issues List" />
+                      <div className="space-y-4">
+                        {issuesList.map((issue: Issue, index: number) => (
+                          <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-all duration-200 hover:bg-gray-100">
+                            <input 
+                              type="checkbox" 
+                              checked={issue.isCompleted}
+                              onChange={() => {
+                                const newList = [...issuesList];
+                                newList[index].isCompleted = !issue.isCompleted;
+                                setIssuesList(newList);
+                              }}
+                              className="w-5 h-5 rounded border-gray-300" 
+                            />
                             <input
                               type="text"
-                              className="w-24 text-sm text-gray-500 bg-transparent border-0 focus:ring-0 text-right"
-                              defaultValue={issue.assignedTo}
-                              placeholder="Assign to"
+                              className={`flex-1 bg-transparent border-0 focus:ring-0 ${issue.isCompleted ? 'line-through text-gray-400' : 'text-gray-700'}`}
+                              defaultValue={issue.issueText}
                               onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
                                 const newList = [...issuesList];
-                                newList[index].assignedTo = e.target.value;
+                                newList[index].issueText = e.target.value;
                                 setIssuesList(newList);
                               }}
                             />
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="p-1 h-auto text-gray-400 hover:text-red-600"
-                              onClick={() => {
-                                setIssuesList(issuesList.filter((_, i: number) => i !== index));
-                              }}
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                className="w-24 text-sm text-gray-500 bg-transparent border-0 focus:ring-0 text-right"
+                                defaultValue={issue.assignedTo}
+                                placeholder="Assign to"
+                                onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+                                  const newList = [...issuesList];
+                                  newList[index].assignedTo = e.target.value;
+                                  setIssuesList(newList);
+                                }}
+                              />
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="p-1 h-auto text-gray-400 hover:text-red-600"
+                                onClick={() => {
+                                  setIssuesList(issuesList.filter((_, i: number) => i !== index));
+                                }}
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                      <Button 
-                        className="w-full mt-4 border border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-600"
-                        onClick={() => {
-                          setIssuesList([
-                            ...issuesList,
-                            { id: null, issueText: "New issue", isCompleted: false, assignedTo: "", dueDate: new Date() }
-                          ]);
-                        }}
-                      >
-                        + Add New Issue
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  {/* Quarterly Rocks Section */}
-                  <div className="bg-blue-50 p-6 rounded-xl border border-blue-200">
-                    <SectionHeader title="Quarterly Rocks" />
-                    <div className="space-y-6">
-                      {/* CRE Groups & Committees */}
-                      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
-                          <input
-                            type="text"
-                            className="text-lg font-semibold text-gray-800 bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-blue-500 focus:ring-0 pb-1"
-                            defaultValue={quarterlyRocks.creGroups.title}
-                            onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
-                              setQuarterlyRocks({
-                                ...quarterlyRocks,
-                                creGroups: {
-                                  ...quarterlyRocks.creGroups,
-                                  title: e.target.value
-                                }
-                              });
-                            }}
-                          />
-                          <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-sm font-medium mt-2 sm:mt-0 flex items-center">
-                            <span className="mr-2">Assigned:</span>
-                            <input
-                              type="text"
-                              className="w-28 bg-transparent border-0 focus:ring-0 text-blue-800 font-medium"
-                              defaultValue={quarterlyRocks.creGroups.assignedTo}
-                              onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
-                                setQuarterlyRocks({
-                                  ...quarterlyRocks,
-                                  creGroups: {
-                                    ...quarterlyRocks.creGroups,
-                                    assignedTo: e.target.value
-                                  }
-                                });
-                              }}
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-6">
-                          <div>
-                            <label className="text-sm font-medium">Current Groups</label>
-                            <textarea 
-                              className="mt-2 w-full rounded-xl border border-gray-200 p-3 min-h-24"
-                              placeholder="List current CRE group memberships"
-                              value={quarterlyRocks.creGroups.currentGroups}
-                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-                                setQuarterlyRocks({
-                                  ...quarterlyRocks,
-                                  creGroups: {
-                                    ...quarterlyRocks.creGroups,
-                                    currentGroups: e.target.value
-                                  }
-                                });
-                              }}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium">Action Items</label>
-                            <textarea 
-                              className="mt-2 w-full rounded-xl border border-gray-200 p-3 min-h-24"
-                              placeholder="List pending actions and next steps"
-                              value={quarterlyRocks.creGroups.actionItems}
-                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-                                setQuarterlyRocks({
-                                  ...quarterlyRocks,
-                                  creGroups: {
-                                    ...quarterlyRocks.creGroups,
-                                    actionItems: e.target.value
-                                  }
-                                });
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Production Rates */}
-                      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
-                          <input
-                            type="text"
-                            className="text-lg font-semibold text-gray-800 bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-blue-500 focus:ring-0 pb-1"
-                            defaultValue={quarterlyRocks.productionRates.title}
-                            onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
-                              setQuarterlyRocks({
-                                ...quarterlyRocks,
-                                productionRates: {
-                                  ...quarterlyRocks.productionRates,
-                                  title: e.target.value
-                                }
-                              });
-                            }}
-                          />
-                          <div className="bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-medium mt-2 sm:mt-0 flex items-center">
-                            <span className="mr-2">Assigned:</span>
-                            <input
-                              type="text"
-                              className="w-28 bg-transparent border-0 focus:ring-0 text-green-800 font-medium"
-                              defaultValue={quarterlyRocks.productionRates.assignedTo}
-                              onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
-                                setQuarterlyRocks({
-                                  ...quarterlyRocks,
-                                  productionRates: {
-                                    ...quarterlyRocks.productionRates,
-                                    assignedTo: e.target.value
-                                  }
-                                });
-                              }}
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-6">
-                          <div>
-                            <label className="text-sm font-medium">Current Status</label>
-                            <input 
-                              type="text"
-                              className="mt-2 w-full rounded-xl border border-gray-200 p-3"
-                              placeholder="Current implementation status"
-                              value={quarterlyRocks.productionRates.currentStatus}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                                setQuarterlyRocks({
-                                  ...quarterlyRocks,
-                                  productionRates: {
-                                    ...quarterlyRocks.productionRates,
-                                    currentStatus: e.target.value
-                                  }
-                                });
-                              }}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-sm font-medium">Updates & Notes</label>
-                            <textarea 
-                              className="mt-2 w-full rounded-xl border border-gray-200 p-3 min-h-24"
-                              placeholder="Recent updates and progress notes"
-                              value={quarterlyRocks.productionRates.updatesNotes}
-                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-                                setQuarterlyRocks({
-                                  ...quarterlyRocks,
-                                  productionRates: {
-                                    ...quarterlyRocks.productionRates,
-                                    updatesNotes: e.target.value
-                                  }
-                                });
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Q3-4 Events */}
-                      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
-                          <input
-                            type="text"
-                            className="text-lg font-semibold text-gray-800 bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-blue-500 focus:ring-0 pb-1"
-                            defaultValue={quarterlyRocks.events.title}
-                            onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
-                              setQuarterlyRocks({
-                                ...quarterlyRocks,
-                                events: {
-                                  ...quarterlyRocks.events,
-                                  title: e.target.value
-                                }
-                              });
-                            }}
-                          />
-                          <div className="bg-orange-100 text-orange-800 px-4 py-2 rounded-full text-sm font-medium mt-2 sm:mt-0 flex items-center">
-                            <span className="mr-2">Assigned:</span>
-                            <input
-                              type="text"
-                              className="w-28 bg-transparent border-0 focus:ring-0 text-orange-800 font-medium"
-                              defaultValue={quarterlyRocks.events.assignedTo}
-                              onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
-                                setQuarterlyRocks({
-                                  ...quarterlyRocks,
-                                  events: {
-                                    ...quarterlyRocks.events,
-                                    assignedTo: e.target.value
-                                  }
-                                });
-                              }}
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-6">
-                          <div>
-                            <label className="flex items-center text-sm font-medium">
-                              <span className="h-3 w-3 rounded-full bg-green-400 mr-2"></span>
-                              Putting World Event
-                            </label>
-                            <textarea 
-                              className="mt-2 w-full rounded-xl border border-gray-200 p-3 min-h-32"
-                              placeholder="Event details"
-                              value={quarterlyRocks.events.puttingWorldEvent}
-                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-                                setQuarterlyRocks({
-                                  ...quarterlyRocks,
-                                  events: {
-                                    ...quarterlyRocks.events,
-                                    puttingWorldEvent: e.target.value
-                                  }
-                                });
-                              }}
-                            />
-                          </div>
-                          <div>
-                            <label className="flex items-center text-sm font-medium">
-                              <span className="h-3 w-3 rounded-full bg-orange-400 mr-2"></span>
-                              LV Charcuterie Event
-                            </label>
-                            <textarea 
-                              className="mt-2 w-full rounded-xl border border-gray-200 p-3 min-h-32"
-                              placeholder="Event details"
-                              value={quarterlyRocks.events.lvCharcuterieEvent}
-                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
-                                setQuarterlyRocks({
-                                  ...quarterlyRocks,
-                                  events: {
-                                    ...quarterlyRocks.events,
-                                    lvCharcuterieEvent: e.target.value
-                                  }
-                                });
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </TabsContent>
-
-                {/* Presentations Tab */}
-                <TabsContent value="presentations">
-                  <div className="space-y-6">
-                    {/* Guidelines Section */}
-                    <div className="bg-purple-50 p-6 rounded-xl border border-purple-200">
-                      <SectionHeader title="Notes/Always bring to a meeting:" />
-                      <ul className="space-y-3 text-purple-900">
-                        {meetingGuidelines.map((guideline: Guideline, index: number) => (
-                          <li key={index} className="flex items-start p-3 bg-white rounded-lg border border-purple-100">
-                            <span className="mr-3 text-purple-500">•</span>
-                            {guideline.guidelineText}
-                          </li>
                         ))}
-                      </ul>
-                    </div>
-
-                    {/* Objection Handling Table */}
-                    <div className="rounded-xl border border-gray-200 overflow-hidden">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between p-6 border-b bg-white">
-                        <h3 className="text-lg font-bold text-gray-800">Objection Handling</h3>
                         <Button 
-                          className="bg-purple-600 hover:bg-purple-700 text-white mt-3 sm:mt-0"
+                          className="w-full mt-4 border border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-600"
                           onClick={() => {
-                            const newObjection = {
-                              id: `temp-${Date.now()}`,
-                              objection: "New objection",
-                              rebuttal: "How to handle it",
-                              thingsToSay: "Recommended phrases",
-                              thingsNotToSay: "Phrases to avoid",
-                              isEditing: true
-                            };
-                            setObjectionHandling([...objectionHandling, newObjection]);
-                            // Set the new objection as being edited
-                            handleObjectionSave(newObjection, true);
+                            setIssuesList([
+                              ...issuesList,
+                              { id: null, issueText: "New issue", isCompleted: false, assignedTo: "", dueDate: new Date() }
+                            ]);
                           }}
                         >
-                          + Add New Entry
+                          + Add New Issue
                         </Button>
                       </div>
-                      <div className="overflow-x-auto">
+                    </div>
+                    
+                    {/* Quarterly Rocks Section */}
+                    <div className="bg-blue-50 p-6 rounded-xl border border-blue-200">
+                      <SectionHeader title="Quarterly Rocks" />
+                      <div className="space-y-6">
+                        {/* CRE Groups & Committees */}
+                        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
+                            <input
+                              type="text"
+                              className="text-lg font-semibold text-gray-800 bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-blue-500 focus:ring-0 pb-1"
+                              defaultValue={quarterlyRocks.creGroups.title}
+                              onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+                                setQuarterlyRocks({
+                                  ...quarterlyRocks,
+                                  creGroups: {
+                                    ...quarterlyRocks.creGroups,
+                                    title: e.target.value
+                                  }
+                                });
+                              }}
+                            />
+                            <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-sm font-medium mt-2 sm:mt-0 flex items-center">
+                              <span className="mr-2">Assigned:</span>
+                              <input
+                                type="text"
+                                className="w-28 bg-transparent border-0 focus:ring-0 text-blue-800 font-medium"
+                                defaultValue={quarterlyRocks.creGroups.assignedTo}
+                                onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+                                  setQuarterlyRocks({
+                                    ...quarterlyRocks,
+                                    creGroups: {
+                                      ...quarterlyRocks.creGroups,
+                                      assignedTo: e.target.value
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-6">
+                            <div>
+                              <label className="text-sm font-medium">Current Groups</label>
+                              <textarea 
+                                className="mt-2 w-full rounded-xl border border-gray-200 p-3 min-h-24"
+                                placeholder="List current CRE group memberships"
+                                value={quarterlyRocks.creGroups.currentGroups}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
+                                  setQuarterlyRocks({
+                                    ...quarterlyRocks,
+                                    creGroups: {
+                                      ...quarterlyRocks.creGroups,
+                                      currentGroups: e.target.value
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium">Action Items</label>
+                              <textarea 
+                                className="mt-2 w-full rounded-xl border border-gray-200 p-3 min-h-24"
+                                placeholder="List pending actions and next steps"
+                                value={quarterlyRocks.creGroups.actionItems}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
+                                  setQuarterlyRocks({
+                                    ...quarterlyRocks,
+                                    creGroups: {
+                                      ...quarterlyRocks.creGroups,
+                                      actionItems: e.target.value
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Production Rates */}
+                        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
+                            <input
+                              type="text"
+                              className="text-lg font-semibold text-gray-800 bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-blue-500 focus:ring-0 pb-1"
+                              defaultValue={quarterlyRocks.productionRates.title}
+                              onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+                                setQuarterlyRocks({
+                                  ...quarterlyRocks,
+                                  productionRates: {
+                                    ...quarterlyRocks.productionRates,
+                                    title: e.target.value
+                                  }
+                                });
+                              }}
+                            />
+                            <div className="bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-medium mt-2 sm:mt-0 flex items-center">
+                              <span className="mr-2">Assigned:</span>
+                              <input
+                                type="text"
+                                className="w-28 bg-transparent border-0 focus:ring-0 text-green-800 font-medium"
+                                defaultValue={quarterlyRocks.productionRates.assignedTo}
+                                onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+                                  setQuarterlyRocks({
+                                    ...quarterlyRocks,
+                                    productionRates: {
+                                      ...quarterlyRocks.productionRates,
+                                      assignedTo: e.target.value
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-6">
+                            <div>
+                              <label className="text-sm font-medium">Current Status</label>
+                              <input 
+                                type="text"
+                                className="mt-2 w-full rounded-xl border border-gray-200 p-3"
+                                placeholder="Current implementation status"
+                                value={quarterlyRocks.productionRates.currentStatus}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                  setQuarterlyRocks({
+                                    ...quarterlyRocks,
+                                    productionRates: {
+                                      ...quarterlyRocks.productionRates,
+                                      currentStatus: e.target.value
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium">Updates & Notes</label>
+                              <textarea 
+                                className="mt-2 w-full rounded-xl border border-gray-200 p-3 min-h-24"
+                                placeholder="Recent updates and progress notes"
+                                value={quarterlyRocks.productionRates.updatesNotes}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
+                                  setQuarterlyRocks({
+                                    ...quarterlyRocks,
+                                    productionRates: {
+                                      ...quarterlyRocks.productionRates,
+                                      updatesNotes: e.target.value
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Q3-4 Events */}
+                        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
+                            <input
+                              type="text"
+                              className="text-lg font-semibold text-gray-800 bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-blue-500 focus:ring-0 pb-1"
+                              defaultValue={quarterlyRocks.events.title}
+                              onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+                                setQuarterlyRocks({
+                                  ...quarterlyRocks,
+                                  events: {
+                                    ...quarterlyRocks.events,
+                                    title: e.target.value
+                                  }
+                                });
+                              }}
+                            />
+                            <div className="bg-orange-100 text-orange-800 px-4 py-2 rounded-full text-sm font-medium mt-2 sm:mt-0 flex items-center">
+                              <span className="mr-2">Assigned:</span>
+                              <input
+                                type="text"
+                                className="w-28 bg-transparent border-0 focus:ring-0 text-orange-800 font-medium"
+                                defaultValue={quarterlyRocks.events.assignedTo}
+                                onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+                                  setQuarterlyRocks({
+                                    ...quarterlyRocks,
+                                    events: {
+                                      ...quarterlyRocks.events,
+                                      assignedTo: e.target.value
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-6">
+                            <div>
+                              <label className="flex items-center text-sm font-medium">
+                                <span className="h-3 w-3 rounded-full bg-green-400 mr-2"></span>
+                                Putting World Event
+                              </label>
+                              <textarea 
+                                className="mt-2 w-full rounded-xl border border-gray-200 p-3 min-h-32"
+                                placeholder="Event details"
+                                value={quarterlyRocks.events.puttingWorldEvent}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
+                                  setQuarterlyRocks({
+                                    ...quarterlyRocks,
+                                    events: {
+                                      ...quarterlyRocks.events,
+                                      puttingWorldEvent: e.target.value
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <label className="flex items-center text-sm font-medium">
+                                <span className="h-3 w-3 rounded-full bg-orange-400 mr-2"></span>
+                                LV Charcuterie Event
+                              </label>
+                              <textarea 
+                                className="mt-2 w-full rounded-xl border border-gray-200 p-3 min-h-32"
+                                placeholder="Event details"
+                                value={quarterlyRocks.events.lvCharcuterieEvent}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
+                                  setQuarterlyRocks({
+                                    ...quarterlyRocks,
+                                    events: {
+                                      ...quarterlyRocks.events,
+                                      lvCharcuterieEvent: e.target.value
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  {/* Presentations Tab */}
+                  <TabsContent value="presentations">
+                    <div className="space-y-6">
+                      {/* Guidelines Section */}
+                      <div className="bg-purple-50 p-6 rounded-xl border border-purple-200">
+                        <SectionHeader title="Notes/Always bring to a meeting:" />
+                        <ul className="space-y-3 text-purple-900">
+                          {meetingGuidelines.map((guideline: Guideline, index: number) => (
+                            <li key={index} className="flex items-start p-3 bg-white rounded-lg border border-purple-100">
+                              <span className="mr-3 text-purple-500">•</span>
+                              {guideline.guidelineText}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Objection Handling Table */}
+                      <div className="rounded-xl border border-gray-200 overflow-hidden">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between p-6 border-b bg-white">
+                          <h3 className="text-lg font-bold text-gray-800">Objection Handling</h3>
+                          <Button 
+                            className="bg-purple-600 hover:bg-purple-700 text-white mt-3 sm:mt-0"
+                            onClick={() => {
+                              const newObjection = {
+                                id: `temp-${Date.now()}`,
+                                objection: "New objection",
+                                rebuttal: "How to handle it",
+                                thingsToSay: "Recommended phrases",
+                                thingsNotToSay: "Phrases to avoid",
+                                isEditing: true
+                              };
+                              setObjectionHandling([...objectionHandling, newObjection]);
+                              // Set the new objection as being edited
+                              handleObjectionSave(newObjection, true);
+                            }}
+                          >
+                            + Add New Entry
+                          </Button>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b bg-purple-50">
+                                <th className="p-4 text-left font-medium text-gray-600">Common Objections</th>
+                                <th className="p-4 text-left font-medium text-gray-600">Rebuttal</th>
+                                <th className="p-4 text-left font-medium text-gray-600">Things to Say</th>
+                                <th className="p-4 text-left font-medium text-gray-600">Things Not to Say</th>
+                                <th className="p-4 text-left font-medium text-gray-600">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {objectionHandling.map((objection: Objection, index: number) => (
+                                <tr key={index} className="border-b hover:bg-gray-50 transition-colors">
+                                  <td className="p-4">
+                                    {objection.isEditing ? (
+                                      <Input
+                                        className="border border-purple-200 p-2 w-full"
+                                        value={objection.objection}
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleObjectionChange(index, 'objection', e.target.value)}
+                                      />
+                                    ) : (
+                                      objection.objection
+                                    )}
+                                  </td>
+                                  <td className="p-4">
+                                    {objection.isEditing ? (
+                                      <textarea
+                                        className="border border-purple-200 p-2 w-full min-h-24"
+                                        value={objection.rebuttal}
+                                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleObjectionChange(index, 'rebuttal', e.target.value)}
+                                      />
+                                    ) : (
+                                      objection.rebuttal
+                                    )}
+                                  </td>
+                                  <td className="p-4">
+                                    {objection.isEditing ? (
+                                      <textarea
+                                        className="border border-purple-200 p-2 w-full min-h-24"
+                                        value={objection.thingsToSay}
+                                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleObjectionChange(index, 'thingsToSay', e.target.value)}
+                                        placeholder="Enter items, one per line"
+                                      />
+                                    ) : (
+                                      <ul className="list-disc pl-4 text-sm space-y-1">
+                                        {objection.thingsToSay.split("\n").map((item: string, i: number) => (
+                                          <li key={i}>{item}</li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </td>
+                                  <td className="p-4 text-red-600">
+                                    {objection.isEditing ? (
+                                      <textarea
+                                        className="border border-purple-200 p-2 w-full min-h-24 text-gray-700"
+                                        value={objection.thingsNotToSay}
+                                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleObjectionChange(index, 'thingsNotToSay', e.target.value)}
+                                        placeholder="Enter items, one per line"
+                                      />
+                                    ) : (
+                                      <ul className="list-disc pl-4 text-sm space-y-1">
+                                        {objection.thingsNotToSay.split("\n").map((item: string, i: number) => (
+                                          <li key={i}>{item}</li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </td>
+                                  <td className="p-4">
+                                    <div className="flex flex-col gap-2">
+                                      {objection.isEditing ? (
+                                        <Button 
+                                          variant="outline" 
+                                          size="sm"
+                                          className="border-green-500 text-green-600"
+                                          onClick={() => handleObjectionSave(objection)}
+                                        >
+                                          Save
+                                        </Button>
+                                      ) : (
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm"
+                                          onClick={() => handleObjectionEdit(index)}
+                                        >
+                                          Edit
+                                        </Button>
+                                      )}
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        className="text-red-600 hover:text-red-800"
+                                        onClick={() => handleObjectionDelete(index)}
+                                      >
+                                        Delete
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Quick Tips Section */}
+                      <div className="p-6 border rounded-xl bg-purple-50">
+                        <h3 className="text-sm font-medium mb-4">Quick Tips</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          {quickTips.map((tip: QuickTip, index: number) => (
+                            <div key={index} className="bg-white p-4 rounded-xl border border-purple-100 transition-all duration-200 hover:shadow-md">
+                              <div className="text-sm text-gray-600">{tip.category}</div>
+                              <div className="text-sm mt-2">{tip.tipText}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+                  
+                  {/* Memberships Tab Content */}
+                  <TabsContent value="memberships">
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between">
+                        <h2 className="text-xl font-bold">Association Memberships</h2>
+                        <Button 
+                          className="bg-orange-600 hover:bg-orange-700 text-white"
+                          onClick={() => {
+                            const newMembership = {
+                              id: `temp-${Date.now()}`,
+                              salesRep: "New Rep",
+                              groups: "",
+                              committees: "",
+                              meetingSchedule: "",
+                              meetingsAttended: 0,
+                              totalMeetings: 0,
+                              isEditing: true
+                            };
+                            setMemberships([...memberships, newMembership]);
+                            handleMembershipSave(newMembership, true);
+                          }}
+                        >
+                          + Add Membership
+                        </Button>
+                      </div>
+
+                      {/* Memberships Table */}
+                      <div className="rounded-xl border">
                         <table className="w-full">
                           <thead>
-                            <tr className="border-b bg-purple-50">
-                              <th className="p-4 text-left font-medium text-gray-600">Common Objections</th>
-                              <th className="p-4 text-left font-medium text-gray-600">Rebuttal</th>
-                              <th className="p-4 text-left font-medium text-gray-600">Things to Say</th>
-                              <th className="p-4 text-left font-medium text-gray-600">Things Not to Say</th>
-                              <th className="p-4 text-left font-medium text-gray-600">Actions</th>
+                            <tr className="border-b bg-orange-50">
+                              <th className="p-3 text-left font-medium">Sales Rep</th>
+                              <th className="p-3 text-left font-medium">Group(s)</th>
+                              <th className="p-3 text-left font-medium">Committees</th>
+                              <th className="p-3 text-left font-medium">Committee Meets When?</th>
+                              <th className="p-3 text-left font-medium">Monthly Meetings Attended</th>
+                              <th className="p-3 text-left font-medium">Actions</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {objectionHandling.map((objection: Objection, index: number) => (
-                              <tr key={index} className="border-b hover:bg-gray-50 transition-colors">
-                                <td className="p-4">
-                                  {objection.isEditing ? (
+                            {memberships.map((membership: Membership, index: number) => (
+                              <tr key={index} className="border-b hover:bg-gray-50">
+                                <td className="p-3">
+                                  {membership.isEditing ? (
                                     <Input
-                                      className="border border-purple-200 p-2 w-full"
-                                      value={objection.objection}
-                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleObjectionChange(index, 'objection', e.target.value)}
+                                      className="border border-orange-200 p-2 w-full"
+                                      value={membership.salesRep}
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'salesRep', e.target.value)}
                                     />
                                   ) : (
-                                    objection.objection
+                                    membership.salesRep
                                   )}
                                 </td>
-                                <td className="p-4">
-                                  {objection.isEditing ? (
-                                    <textarea
-                                      className="border border-purple-200 p-2 w-full min-h-24"
-                                      value={objection.rebuttal}
-                                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleObjectionChange(index, 'rebuttal', e.target.value)}
+                                <td className="p-3">
+                                  {membership.isEditing ? (
+                                    <Input
+                                      className="border border-orange-200 p-2 w-full"
+                                      value={membership.groups}
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'groups', e.target.value)}
+                                      placeholder="BOMA, NAIOP, etc."
                                     />
                                   ) : (
-                                    objection.rebuttal
+                                    membership.groups
                                   )}
                                 </td>
-                                <td className="p-4">
-                                  {objection.isEditing ? (
-                                    <textarea
-                                      className="border border-purple-200 p-2 w-full min-h-24"
-                                      value={objection.thingsToSay}
-                                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleObjectionChange(index, 'thingsToSay', e.target.value)}
-                                      placeholder="Enter items, one per line"
+                                <td className="p-3">
+                                  {membership.isEditing ? (
+                                    <Input
+                                      className="border border-orange-200 p-2 w-full"
+                                      value={membership.committees}
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'committees', e.target.value)}
+                                      placeholder="Committee names"
                                     />
                                   ) : (
-                                    <ul className="list-disc pl-4 text-sm space-y-1">
-                                      {objection.thingsToSay.split("\n").map((item: string, i: number) => (
-                                        <li key={i}>{item}</li>
-                                      ))}
-                                    </ul>
+                                    membership.committees
                                   )}
                                 </td>
-                                <td className="p-4 text-red-600">
-                                  {objection.isEditing ? (
-                                    <textarea
-                                      className="border border-purple-200 p-2 w-full min-h-24 text-gray-700"
-                                      value={objection.thingsNotToSay}
-                                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleObjectionChange(index, 'thingsNotToSay', e.target.value)}
-                                      placeholder="Enter items, one per line"
+                                <td className="p-3">
+                                  {membership.isEditing ? (
+                                    <Input
+                                      className="border border-orange-200 p-2 w-full"
+                                      value={membership.meetingSchedule}
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'meetingSchedule', e.target.value)}
+                                      placeholder="e.g., 2nd Tuesday"
                                     />
                                   ) : (
-                                    <ul className="list-disc pl-4 text-sm space-y-1">
-                                      {objection.thingsNotToSay.split("\n").map((item: string, i: number) => (
-                                        <li key={i}>{item}</li>
-                                      ))}
-                                    </ul>
+                                    membership.meetingSchedule
                                   )}
                                 </td>
-                                <td className="p-4">
+                                <td className="p-3">
+                                  {membership.isEditing ? (
+                                    <div className="flex items-center space-x-2">
+                                      <Input
+                                        type="number"
+                                        className="border border-orange-200 p-2 w-14 text-center"
+                                        value={membership.meetingsAttended}
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'meetingsAttended', parseInt(e.target.value) || 0)}
+                                        min="0"
+                                      />
+                                      <span>/</span>
+                                      <Input
+                                        type="number"
+                                        className="border border-orange-200 p-2 w-14 text-center"
+                                        value={membership.totalMeetings}
+                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'totalMeetings', parseInt(e.target.value) || 0)}
+                                        min="0"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <span className={`px-2 py-1 rounded-full text-sm ${
+                                      membership.meetingsAttended === membership.totalMeetings
+                                        ? "bg-green-100 text-green-800"
+                                        : "bg-yellow-100 text-yellow-800"
+                                    }`}>
+                                      {membership.meetingsAttended}/{membership.totalMeetings}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-3">
                                   <div className="flex flex-col gap-2">
-                                    {objection.isEditing ? (
+                                    {membership.isEditing ? (
                                       <Button 
                                         variant="outline" 
                                         size="sm"
                                         className="border-green-500 text-green-600"
-                                        onClick={() => handleObjectionSave(objection)}
+                                        onClick={() => handleMembershipSave(membership)}
                                       >
                                         Save
                                       </Button>
@@ -3194,7 +3501,7 @@ return (
                                       <Button 
                                         variant="ghost" 
                                         size="sm"
-                                        onClick={() => handleObjectionEdit(index)}
+                                        onClick={() => handleMembershipEdit(index)}
                                       >
                                         Edit
                                       </Button>
@@ -3203,7 +3510,7 @@ return (
                                       variant="ghost" 
                                       size="sm"
                                       className="text-red-600 hover:text-red-800"
-                                      onClick={() => handleObjectionDelete(index)}
+                                      onClick={() => handleMembershipDelete(index)}
                                     >
                                       Delete
                                     </Button>
@@ -3214,562 +3521,276 @@ return (
                           </tbody>
                         </table>
                       </div>
-                    </div>
 
-                    {/* Quick Tips Section */}
-                    <div className="p-6 border rounded-xl bg-purple-50">
-                      <h3 className="text-sm font-medium mb-4">Quick Tips</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        {quickTips.map((tip: QuickTip, index: number) => (
-                          <div key={index} className="bg-white p-4 rounded-xl border border-purple-100 transition-all duration-200 hover:shadow-md">
-                            <div className="text-sm text-gray-600">{tip.category}</div>
-                            <div className="text-sm mt-2">{tip.tipText}</div>
+                      {/* Quick Stats */}
+                      <div className="p-6 border rounded-xl bg-orange-50">
+                        <h3 className="text-sm font-medium mb-4">Quick Stats</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <div className="bg-white p-4 rounded-xl border border-orange-100 transition-all duration-200 hover:shadow-md">
+                            <div className="text-sm text-gray-600">Total Active Members</div>
+                            <div className="text-2xl font-bold">{memberships.length}</div>
                           </div>
-                        ))}
+                          <div className="bg-white p-4 rounded-xl border border-orange-100 transition-all duration-200 hover:shadow-md">
+                            <div className="text-sm text-gray-600">Total Groups</div>
+                            <div className="text-2xl font-bold">
+                              {new Set(memberships.flatMap((m: Membership) => m.groups.split(',').map((g: string) => g.trim()))).size}
+                            </div>
+                          </div>
+                          <div className="bg-white p-4 rounded-xl border border-orange-100 transition-all duration-200 hover:shadow-md">
+                            <div className="text-sm text-gray-600">Meeting Attendance</div>
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-2xl font-bold">
+                                {Math.round(
+                                  (memberships.reduce((sum: number, m: Membership) => sum + m.meetingsAttended, 0) / 
+                                   memberships.reduce((sum: number, m: Membership) => sum + m.totalMeetings, 1)) * 100
+                                )}
+                              </span>
+                              <span className="text-gray-600">%</span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </TabsContent>
-                
-                {/* Memberships Tab Content */}
-<TabsContent value="memberships">
-  <div className="space-y-6">
-    <div className="flex items-center justify-between">
-      <h2 className="text-xl font-bold">Association Memberships</h2>
-      <Button 
-        className="bg-orange-600 hover:bg-orange-700 text-white"
-        onClick={() => {
-          const newMembership = {
-            id: `temp-${Date.now()}`,
-            salesRep: "New Rep",
-            groups: "",
-            committees: "",
-            meetingSchedule: "",
-            meetingsAttended: 0,
-            totalMeetings: 0,
-            isEditing: true
-          };
-          setMemberships([...memberships, newMembership]);
-          handleMembershipSave(newMembership, true);
-        }}
-      >
-        + Add Membership
-      </Button>
-    </div>
+                  </TabsContent>
+                  
+                  {/* Target List Tab Content - UPDATED to be more table-like and removed Projected Value */}
+                  <TabsContent value="targetList">
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-xl font-bold text-gray-800">Target Companies - Commercial Landscape Prospects</h2>
+                        <Button 
+                          className="bg-red-600 hover:bg-red-700 text-white"
+                          onClick={() => {
+                            const newTarget: Target = {
+                              id: Date.now().toString(),
+                              company: "New Company",
+                              contact_name: "New Contact",
+                              contact_title: "Position",
+                              contact_email: "",
+                              properties: "Properties we currently maintain",
+                              sales_rep: "",
+                              sales_rep_name: "",
+                              notes: "New prospect notes",
+                              created_at: new Date().toISOString(),
+                              projected_value: "0" // Still need to keep this field in the data structure
+                            };
+                            saveTarget((prevTargets: Target[]) => [...prevTargets, newTarget]);
+                          }}
+                        >
+                          + Add Company
+                        </Button>
+                      </div>
+                      
+                      {/* Search and Filter Controls */}
+                      <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                        <div className="flex-1">
+                          <Input
+                            className="border border-gray-200"
+                            placeholder="Search companies or contacts..."
+                            value={searchQuery}
+                            onChange={handleTargetSearch}
+                          />
+                        </div>
+                        <div className="w-full sm:w-48">
+                          <select
+                            className="w-full p-2 border border-gray-200 rounded-md"
+                            value={selectedRep}
+                            onChange={handleRepFilter}
+                          >
+                            <option value="">All Reps</option>
+                            <option value="SJ">Sarah Johnson</option>
+                            <option value="MC">Mike Chen</option>
+                            <option value="LB">Lisa Brown</option>
+                            <option value="JS">John Smith</option>
+                          </select>
+                        </div>
+                      </div>
 
-    {/* Memberships Table */}
-    <div className="rounded-xl border">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b bg-orange-50">
-            <th className="p-3 text-left font-medium">Sales Rep</th>
-            <th className="p-3 text-left font-medium">Group(s)</th>
-            <th className="p-3 text-left font-medium">Committees</th>
-            <th className="p-3 text-left font-medium">Committee Meets When?</th>
-            <th className="p-3 text-left font-medium">Monthly Meetings Attended</th>
-            <th className="p-3 text-left font-medium">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {memberships.map((membership: Membership, index: number) => (
-            <tr key={index} className="border-b hover:bg-gray-50">
-              <td className="p-3">
-                {membership.isEditing ? (
-                  <Input
-                    className="border border-orange-200 p-2 w-full"
-                    value={membership.salesRep}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'salesRep', e.target.value)}
-                  />
-                ) : (
-                  membership.salesRep
-                )}
-              </td>
-              <td className="p-3">
-                {membership.isEditing ? (
-                  <Input
-                    className="border border-orange-200 p-2 w-full"
-                    value={membership.groups}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'groups', e.target.value)}
-                    placeholder="BOMA, NAIOP, etc."
-                  />
-                ) : (
-                  membership.groups
-                )}
-              </td>
-              <td className="p-3">
-                {membership.isEditing ? (
-                  <Input
-                    className="border border-orange-200 p-2 w-full"
-                    value={membership.committees}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'committees', e.target.value)}
-                    placeholder="Committee names"
-                  />
-                ) : (
-                  membership.committees
-                )}
-              </td>
-              <td className="p-3">
-                {membership.isEditing ? (
-                  <Input
-                    className="border border-orange-200 p-2 w-full"
-                    value={membership.meetingSchedule}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'meetingSchedule', e.target.value)}
-                    placeholder="e.g., 2nd Tuesday"
-                  />
-                ) : (
-                  membership.meetingSchedule
-                )}
-              </td>
-              <td className="p-3">
-                {membership.isEditing ? (
-                  <div className="flex items-center space-x-2">
-                    <Input
-                      type="number"
-                      className="border border-orange-200 p-2 w-14 text-center"
-                      value={membership.meetingsAttended}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'meetingsAttended', parseInt(e.target.value) || 0)}
-                      min="0"
-                    />
-                    <span>/</span>
-                    <Input
-                      type="number"
-                      className="border border-orange-200 p-2 w-14 text-center"
-                      value={membership.totalMeetings}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMembershipChange(index, 'totalMeetings', parseInt(e.target.value) || 0)}
-                      min="0"
-                    />
-                  </div>
-                ) : (
-                  <span className={`px-2 py-1 rounded-full text-sm ${
-                    membership.meetingsAttended === membership.totalMeetings
-                      ? "bg-green-100 text-green-800"
-                      : "bg-yellow-100 text-yellow-800"
-                  }`}>
-                    {membership.meetingsAttended}/{membership.totalMeetings}
-                  </span>
-                )}
-              </td>
-              <td className="p-3">
-                <div className="flex flex-col gap-2">
-                  {membership.isEditing ? (
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="border-green-500 text-green-600"
-                      onClick={() => handleMembershipSave(membership)}
-                    >
-                      Save
-                    </Button>
-                  ) : (
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => handleMembershipEdit(index)}
-                    >
-                      Edit
-                    </Button>
-                  )}
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    className="text-red-600 hover:text-red-800"
-                    onClick={() => handleMembershipDelete(index)}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-
-    {/* Quick Stats */}
-    <div className="p-6 border rounded-xl bg-orange-50">
-      <h3 className="text-sm font-medium mb-4">Quick Stats</h3>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-orange-100 transition-all duration-200 hover:shadow-md">
-          <div className="text-sm text-gray-600">Total Active Members</div>
-          <div className="text-2xl font-bold">{memberships.length}</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-orange-100 transition-all duration-200 hover:shadow-md">
-          <div className="text-sm text-gray-600">Total Groups</div>
-          <div className="text-2xl font-bold">
-            {new Set(memberships.flatMap((m: Membership) => m.groups.split(',').map((g: string) => g.trim()))).size}
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-orange-100 transition-all duration-200 hover:shadow-md">
-          <div className="text-sm text-gray-600">Meeting Attendance</div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-bold">
-              {Math.round(
-                (memberships.reduce((sum: number, m: Membership) => sum + m.meetingsAttended, 0) / 
-                 memberships.reduce((sum: number, m: Membership) => sum + m.totalMeetings, 1)) * 100
+                      {/* Main Target List Table */}
+                      <div className="overflow-x-auto border border-gray-200 rounded-lg shadow-sm">
+                        <table className="w-full bg-white border-collapse">
+                          <thead>
+                            <tr className="bg-red-50">
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b border-gray-200">Company</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b border-gray-200">Contact Name</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b border-gray-200">Contact Email</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b border-gray-200">Properties We Maintain</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b border-gray-200">Notes</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-700 border-b border-gray-200">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredTargets.length > 0 ? (
+                              filteredTargets.map((target: Target) => (
+                                <tr key={target.id} className="hover:bg-gray-50 border-b border-gray-100">
+                                  <td className="px-4 py-3">
+                                    <input
+                                      className="w-full bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-red-400 focus:ring-0 text-gray-800"
+                                      defaultValue={target.company}
+                                      placeholder="Company Name"
+                                      onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+                                        if (e.target.value !== target.company) {
+                                          saveTarget((prevTargets: Target[]) => 
+                                            prevTargets.map((t: Target) => 
+                                              t.id === target.id 
+                                                ? {...t, company: e.target.value} 
+                                                : t
+                                            )
+                                          );
+                                        }
+                                      }}
+                                    />
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <input
+                                      className="w-full bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-red-400 focus:ring-0"
+                                      defaultValue={target.contact_name}
+                                      placeholder="Contact Name"
+                                      onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+                                        if (e.target.value !== target.contact_name) {
+                                          saveTarget((prevTargets: Target[]) => 
+                                            prevTargets.map((t: Target) => 
+                                              t.id === target.id 
+                                                ? {...t, contact_name: e.target.value} 
+                                                : t
+                                            )
+                                          );
+                                        }
+                                      }}
+                                    />
+                                    <div className="text-xs text-gray-500 mt-1">{target.contact_title}</div>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <input
+                                      className="w-full bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-red-400 focus:ring-0"
+                                      defaultValue={target.contact_email}
+                                      placeholder="Email Address"
+                                      onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+                                        if (e.target.value !== target.contact_email) {
+                                          saveTarget((prevTargets: Target[]) => 
+                                            prevTargets.map((t: Target) => 
+                                              t.id === target.id 
+                                                ? {...t, contact_email: e.target.value} 
+                                                : t
+                                            )
+                                          );
+                                        }
+                                      }}
+                                    />
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <textarea
+                                      className="w-full bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-red-400 focus:ring-0 resize-none min-h-[60px]"
+                                      defaultValue={target.properties}
+                                      placeholder="Properties"
+                                      onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => {
+                                        if (e.target.value !== target.properties) {
+                                          saveTarget((prevTargets: Target[]) => 
+                                            prevTargets.map((t: Target) => 
+                                              t.id === target.id 
+                                                ? {...t, properties: e.target.value} 
+                                                : t
+                                            )
+                                          );
+                                        }
+                                      }}
+                                    />
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <textarea
+                                      className="w-full bg-transparent border-0 border-b border-dashed border-gray-200 focus:border-red-400 focus:ring-0 resize-none min-h-[60px]"
+                                      defaultValue={target.notes}
+                                      placeholder="Notes"
+                                      onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => {
+                                        if (e.target.value !== target.notes) {
+                                          saveTarget((prevTargets: Target[]) => 
+                                            prevTargets.map((t: Target) => 
+                                              t.id === target.id 
+                                                ? {...t, notes: e.target.value} 
+                                                : t
+                                            )
+                                          );
+                                        }
+                                      }}
+                                    />
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex flex-col gap-2">
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        className="text-red-600 hover:text-red-800"
+                                        onClick={() => {
+                                          saveTarget((prevTargets: Target[]) => 
+                                            prevTargets.filter((t: Target) => t.id !== target.id)
+                                          );
+                                        }}
+                                      >
+                                        Delete
+                                      </Button>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        className="text-blue-600 hover:text-blue-800"
+                                        onClick={() => {
+                                          const newContact = {
+                                            ...target,
+                                            id: Date.now().toString(),
+                                            contact_name: "New Contact",
+                                            contact_title: "",
+                                            contact_email: ""
+                                          };
+                                          saveTarget((prevTargets: Target[]) => [...prevTargets, newContact]);
+                                        }}
+                                      >
+                                        + Contact
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                                  <div className="flex flex-col items-center">
+                                    <Target className="h-8 w-8 text-red-400 mb-2" />
+                                    <p className="text-lg font-medium">No targets found</p>
+                                    <p className="text-sm text-gray-500">
+                                      {searchQuery || selectedRep ? 'Try adjusting your search or filters' : 'Add your first target company to get started'}
+                                    </p>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      
+                      {/* Stats Summary without Projected Value */}
+                      {targets.length > 0 && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+                          <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm">
+                            <div className="text-sm text-gray-600 mb-1">Total Companies</div>
+                            <div className="text-2xl font-bold">
+                              {new Set(targets.map((t: Target) => t.company)).size}
+                            </div>
+                          </div>
+                          <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm">
+                            <div className="text-sm text-gray-600 mb-1">Total Contacts</div>
+                            <div className="text-2xl font-bold">{targets.length}</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                </>
               )}
-            </span>
-            <span className="text-gray-600">%</span>
+            </Tabs>
           </div>
-        </div>
+        )}
       </div>
     </div>
-  </div>
-</TabsContent>
-                
-                {/* Target List Tab Content - UPDATED for Multiple Contacts per Company */}
-                <TabsContent value="targetList">
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-xl font-bold text-gray-800">Target Companies - Commercial Landscape Prospects</h2>
-                      <Button 
-                        className="bg-red-600 hover:bg-red-700 text-white"
-                        onClick={() => {
-                          const newCompanyId = `company-${Date.now()}`;
-                          const newTarget: Target = {
-                            id: Date.now().toString(),
-                            company_id: newCompanyId,
-                            company: "New Company",
-                            contact_name: "New Contact",
-                            contact_title: "Position",
-                            contact_email: "",
-                            properties: "Properties we currently maintain",
-                            sales_rep: "",
-                            sales_rep_name: "",
-                            notes: "New prospect notes",
-                            created_at: new Date().toISOString(),
-                            projected_value: "0"
-                          };
-                          saveTarget((prevTargets: Target[]) => [...prevTargets, newTarget]);
-                        }}
-                      >
-                        + Add Company
-                      </Button>
-                    </div>
-                    
-                    {/* Targets List - Grouped by Company */}
-                    <div className="space-y-4">
-                      {/* Group targets by company */}
-                      {(() => {
-                        // Create a map of companies and their contacts
-                        const companiesMap: {[key: string]: {
-                          company: string;
-                          contacts: {id: string; name: string; title: string; email: string}[];
-                          properties: string;
-                          projected_value: string;
-                          notes: string;
-                          id: string;
-                        }} = {};
-                        
-                        // Group targets by company
-                        targets.forEach((target: Target) => {
-                          const companyName = target.company || '';
-                          if (!companiesMap[companyName]) {
-                            companiesMap[companyName] = {
-                              company: companyName,
-                              contacts: [],
-                              properties: target.properties || '',
-                              projected_value: target.projected_value || '0',
-                              notes: target.notes || '',
-                              id: target.id
-                            };
-                          }
-                          
-                          companiesMap[companyName].contacts.push({
-                            id: target.id,
-                            name: target.contact_name,
-                            title: target.contact_title,
-                            email: target.contact_email
-                          });
-                        });
-                        
-                        // Convert map to array for rendering
-                        return Object.values(companiesMap).map((company, index) => (
-                          <div 
-                            key={index} 
-                            className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-all duration-200"
-                          >
-                            {/* Company Header */}
-                            <div className="bg-red-50 p-4 border-b border-red-100 flex justify-between items-center">
-                              <div>
-                                <input
-                                  className="text-lg font-semibold text-gray-800 bg-transparent border-0 focus:ring-0 border-b border-dashed border-red-200 hover:border-red-400 focus:border-red-500"
-                                  defaultValue={company.company}
-                                  placeholder="Company Name"
-                                  onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
-                                    if (e.target.value !== company.company) {
-                                      const newCompanyName = e.target.value;
-                                      saveTarget((prevTargets: Target[]) => 
-                                        prevTargets.map((t: Target) => 
-                                          t.company === company.company 
-                                            ? {...t, company: newCompanyName} 
-                                            : t
-                                        )
-                                      );
-                                    }
-                                  }}
-                                />
-                                <div className="text-sm text-gray-600 mt-1">
-                                  <span className="font-medium text-green-600">${company.projected_value}K</span> Projected Value
-                                </div>
-                              </div>
-                              <div className="flex gap-2">
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="bg-blue-50 text-blue-600 hover:bg-blue-100"
-                                  onClick={() => {
-                                    // Add a new contact to this company
-                                    const newContact: Target = {
-                                      id: Date.now().toString(),
-                                      company: company.company,
-                                      contact_name: "New Contact",
-                                      contact_title: "Position",
-                                      contact_email: "",
-                                      properties: company.properties,
-                                      sales_rep: "",
-                                      sales_rep_name: "",
-                                      notes: company.notes,
-                                      created_at: new Date().toISOString(),
-                                      projected_value: company.projected_value
-                                    };
-                                    saveTarget((prevTargets: Target[]) => [...prevTargets, newContact]);
-                                  }}
-                                >
-                                  + Add Contact
-                                </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="text-red-600 hover:text-red-800"
-                                  onClick={() => {
-                                    // Delete this company and all its contacts
-                                    saveTarget((prevTargets: Target[]) => 
-                                      prevTargets.filter((t: Target) => t.company !== company.company)
-                                    );
-                                  }}
-                                >
-                                  Delete
-                                </Button>
-                              </div>
-                            </div>
-                            
-                            {/* Company Details */}
-                            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                  Properties We Maintain
-                                </label>
-                                <textarea
-                                  className="w-full border border-gray-200 rounded-lg p-2 min-h-32 focus:border-red-400 focus:ring-red-200"
-                                  defaultValue={company.properties}
-                                  placeholder="List properties we currently maintain"
-                                  onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => {
-                                    if (e.target.value !== company.properties) {
-                                      const newProperties = e.target.value;
-                                      saveTarget((prevTargets: Target[]) => 
-                                        prevTargets.map((t: Target) => 
-                                          t.company === company.company 
-                                            ? {...t, properties: newProperties} 
-                                            : t
-                                        )
-                                      );
-                                    }
-                                  }}
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                  Notes
-                                </label>
-                                <textarea
-                                  className="w-full border border-gray-200 rounded-lg p-2 min-h-32 focus:border-red-400 focus:ring-red-200"
-                                  defaultValue={company.notes}
-                                  placeholder="Add notes about this prospect"
-                                  onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => {
-                                    if (e.target.value !== company.notes) {
-                                      const newNotes = e.target.value;
-                                      saveTarget((prevTargets: Target[]) => 
-                                        prevTargets.map((t: Target) => 
-                                          t.company === company.company 
-                                            ? {...t, notes: newNotes} 
-                                            : t
-                                        )
-                                      );
-                                    }
-                                  }}
-                                />
-                              </div>
-                            </div>
-                            
-                            {/* Projected Value */}
-                            <div className="px-4 pb-2">
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Projected Value ($K)
-                              </label>
-                              <div className="flex items-center w-48">
-                                <span className="text-green-600 font-medium mr-1">$</span>
-                                <Input
-                                  type="number"
-                                  className="border border-gray-200 p-2 focus:border-red-400 focus:ring-red-200 font-medium text-green-600"
-                                  defaultValue={company.projected_value || '0'}
-                                  onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
-                                    if (e.target.value !== company.projected_value) {
-                                      const newValue = e.target.value;
-                                      saveTarget((prevTargets: Target[]) => 
-                                        prevTargets.map((t: Target) => 
-                                          t.company === company.company 
-                                            ? {...t, projected_value: newValue} 
-                                            : t
-                                        )
-                                      );
-                                    }
-                                  }}
-                                />
-                                <span className="text-green-600 font-medium ml-1">K</span>
-                              </div>
-                            </div>
-                            
-                            {/* Contacts List */}
-                            <div className="px-4 pb-4">
-                              <h4 className="text-sm font-medium text-gray-700 mb-2">
-                                Contacts ({company.contacts.length})
-                              </h4>
-                              <div className="space-y-3">
-                                {company.contacts.map((contact, contactIndex) => (
-                                  <div key={contactIndex} className="grid grid-cols-3 gap-3 p-3 bg-gray-50 rounded-lg">
-                                    <div>
-                                      <label className="text-xs text-gray-500">Name</label>
-                                      <Input
-                                        className="mt-1 border-gray-200 focus:border-red-400 focus:ring-red-200"
-                                        defaultValue={contact.name}
-                                        placeholder="Contact name"
-                                        onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
-                                          if (e.target.value !== contact.name) {
-                                            saveTarget((prevTargets: Target[]) => 
-                                              prevTargets.map((t: Target) => 
-                                                t.id === contact.id 
-                                                  ? {...t, contact_name: e.target.value} 
-                                                  : t
-                                              )
-                                            );
-                                          }
-                                        }}
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="text-xs text-gray-500">Title</label>
-                                      <Input
-                                        className="mt-1 border-gray-200 focus:border-red-400 focus:ring-red-200"
-                                        defaultValue={contact.title}
-                                        placeholder="Position/Title"
-                                        onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
-                                          if (e.target.value !== contact.title) {
-                                            saveTarget((prevTargets: Target[]) => 
-                                              prevTargets.map((t: Target) => 
-                                                t.id === contact.id 
-                                                  ? {...t, contact_title: e.target.value} 
-                                                  : t
-                                              )
-                                            );
-                                          }
-                                        }}
-                                      />
-                                    </div>
-                                    <div className="relative">
-                                      <label className="text-xs text-gray-500">Email</label>
-                                      <div className="flex mt-1">
-                                        <Input
-                                          className="border-gray-200 focus:border-red-400 focus:ring-red-200 flex-1"
-                                          defaultValue={contact.email}
-                                          placeholder="Email address"
-                                          onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
-                                            if (e.target.value !== contact.email) {
-                                              saveTarget((prevTargets: Target[]) => 
-                                                prevTargets.map((t: Target) => 
-                                                  t.id === contact.id 
-                                                    ? {...t, contact_email: e.target.value} 
-                                                    : t
-                                                )
-                                              );
-                                            }
-                                          }}
-                                        />
-                                        {company.contacts.length > 1 && (
-                                          <Button 
-                                            variant="ghost" 
-                                            size="sm" 
-                                            className="ml-2 text-red-600 hover:text-red-800"
-                                            onClick={() => {
-                                              saveTarget((prevTargets: Target[]) => 
-                                                prevTargets.filter((t: Target) => t.id !== contact.id)
-                                              );
-                                            }}
-                                          >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
-                                          </Button>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        ));
-                      })()}
-                    </div>
-                    
-                    {/* Empty state */}
-                    {targets.length === 0 && (
-                      <div className="p-8 text-center text-gray-500 bg-white rounded-xl border border-gray-200">
-                        <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center rounded-full bg-red-50">
-                          <Target className="h-8 w-8 text-red-400" />
-                        </div>
-                        <h3 className="text-lg font-medium mb-2">No companies yet</h3>
-                        <p className="mb-4">Click "Add Company" to create your first target company.</p>
-                      </div>
-                    )}
-                    
-                    {/* Quick Stats */}
-                    {targets.length > 0 && (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm">
-                          <div className="text-sm text-gray-600 mb-1">Total Companies</div>
-                          <div className="text-2xl font-bold">
-                            {new Set(targets.map((t: Target) => t.company)).size}
-                          </div>
-                        </div>
-                        <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm">
-                          <div className="text-sm text-gray-600 mb-1">Total Contacts</div>
-                          <div className="text-2xl font-bold">{targets.length}</div>
-                        </div>
-                        <div className="bg-white p-4 rounded-xl border border-red-100 shadow-sm">
-                          <div className="text-sm text-gray-600 mb-1">Projected Value</div>
-                          <div className="text-2xl font-bold text-green-600">
-                            ${targets.reduce((sum: number, t: Target) => {
-                              // Count each company's projected value only once
-                              const companies = new Set();
-                              if (companies.has(t.company)) return sum;
-                              companies.add(t.company);
-                              return sum + (parseFloat(t.projected_value || '0') || 0);
-                            }, 0).toLocaleString('en-US', {
-                              minimumFractionDigits: 0,
-                              maximumFractionDigits: 0
-                            })}K
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </TabsContent>
-              </>
-            )}
-          </Tabs>
-        </div>
-      )}
-    </div>
-  </div>
-);
+  );
 };
 
 export default BDDashboard;

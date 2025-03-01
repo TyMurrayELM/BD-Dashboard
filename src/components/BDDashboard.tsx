@@ -2575,18 +2575,18 @@ const handleCurrentRevenueChange = (e: React.ChangeEvent<HTMLInputElement>, regi
 
                       {/* Las Vegas Region - Updated with white boxes and wider input fields */}
                       <div className="mb-8">
-                        <div className="flex items-center mb-4">
-                          <div className="h-4 w-4 bg-yellow-600 rounded-full mr-2"></div>
-                          <h3 className="text-lg font-semibold text-yellow-800">Las Vegas Region</h3>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            className="ml-auto border-yellow-300 text-yellow-600 hover:bg-yellow-50"
-                            onClick={(e) => handleMetricsUpdate(e, 'Las Vegas')}
-                          >
-                            Update Las Vegas Metrics
-                          </Button>
-                        </div>
+  <div className="flex items-center mb-4">
+    <img src="/icons/lv.png" alt="Las Vegas" className="h-6 w-6 mr-2" />
+    <h3 className="text-lg font-semibold text-yellow-800">Las Vegas Region</h3>
+    <Button 
+      variant="ghost" 
+      size="sm"
+      className="ml-auto border-yellow-300 text-yellow-600 hover:bg-yellow-50"
+      onClick={(e) => handleMetricsUpdate(e, 'Las Vegas')}
+    >
+      Update Las Vegas Metrics
+    </Button>
+  </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white p-4 rounded-xl border border-yellow-200">
                           <div className="bg-white p-6 rounded-xl border border-gray-200 transition-all duration-200 hover:shadow-md">
                             <div className="text-sm text-gray-600 mb-2">Revenue</div>
@@ -2643,18 +2643,18 @@ const handleCurrentRevenueChange = (e: React.ChangeEvent<HTMLInputElement>, regi
 
                       {/* Phoenix Region - Updated with white boxes and wider input fields */}
                       <div>
-                        <div className="flex items-center mb-4">
-                          <div className="h-4 w-4 bg-orange-600 rounded-full mr-2"></div>
-                          <h3 className="text-lg font-semibold text-orange-800">Phoenix Region</h3>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            className="ml-auto border-orange-300 text-orange-600 hover:bg-orange-50"
-                            onClick={(e) => handleMetricsUpdate(e, 'Phoenix')}
-                          >
-                            Update Phoenix Metrics
-                          </Button>
-                        </div>
+                      <div className="flex items-center mb-4">
+    <img src="/icons/az.png" alt="Phoenix" className="h-6 w-6 mr-2" />
+    <h3 className="text-lg font-semibold text-orange-800">Phoenix Region</h3>
+    <Button 
+      variant="ghost" 
+      size="sm"
+      className="ml-auto border-orange-300 text-orange-600 hover:bg-orange-50"
+      onClick={(e) => handleMetricsUpdate(e, 'Phoenix')}
+    >
+      Update Phoenix Metrics
+    </Button>
+  </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white p-4 rounded-xl border border-orange-200">
                           <div className="bg-white p-6 rounded-xl border border-gray-200 transition-all duration-200 hover:shadow-md">
                             <div className="text-sm text-gray-600 mb-2">Revenue</div>

@@ -963,12 +963,12 @@ const BDDashboard = () => {
             id: null,
             year: new Date().getFullYear(),
             region: 'Las Vegas',
-            revenueTarget: '3.25',
+            revenueTarget: '1.25',
             revenueDescription: 'new maintenance',
             retentionGoal: '90',
             retentionDescription: 'customer retention',
             currentRevenue: '2.85',
-            currentRetention: '88'
+            currentRetention: '97'
           },
           'Phoenix': {
             id: null,
@@ -976,10 +976,10 @@ const BDDashboard = () => {
             region: 'Phoenix',
             revenueTarget: '2.75',
             revenueDescription: 'new maintenance',
-            retentionGoal: '85',
+            retentionGoal: '90',
             retentionDescription: 'customer retention',
             currentRevenue: '2.40',
-            currentRetention: '82'
+            currentRetention: '97'
           }
         };
         

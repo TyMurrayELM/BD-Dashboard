@@ -732,29 +732,48 @@ const BDDashboard = () => {
   // ========================
   
   // Generate week options for the dropdown
-  useEffect(() => {
-    const generateWeekOptions = () => {
-      const options: WeekOption[] = [];
-      const today = new Date();
-      
-      for (let i = -12; i <= 4; i++) {
-        const weekStart = startOfWeek(addWeeks(today, i), { weekStartsOn: 1 });
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekEnd.getDate() + 4);
-        
-        options.push({
-          value: format(weekStart, 'yyyy-MM-dd'),
-          label: `${format(weekStart, 'MMM d')} - ${format(weekEnd, 'MMM d, yyyy')}`
-        });
-      }
-      
-      setWeekOptions(options);
-      const currentWeekStart = startOfWeek(today, { weekStartsOn: 1 });
-      setSelectedWeek(format(currentWeekStart, 'yyyy-MM-dd'));
-    };
+// Generate week options for the dropdown
+// Generate week options for the dropdown
+useEffect(() => {
+  const generateWeekOptions = () => {
+    const options: WeekOption[] = [];
+    const today = new Date();
     
-    generateWeekOptions();
-  }, []);
+    // Start date: Feb 24, 2025 (Monday)
+    const startDate = new Date(2025, 1, 24); // Month is 0-indexed, so 1 = February
+    
+    // End date: Dec 31, 2025
+    const endDate = new Date(2025, 11, 31);
+    
+    // Generate all weeks in 2025 starting from Feb 24
+    let currentWeekStart = startOfWeek(startDate, { weekStartsOn: 1 });
+    
+    while (currentWeekStart <= endDate) {
+      const weekEnd = new Date(currentWeekStart);
+      weekEnd.setDate(weekEnd.getDate() + 4); // Add 4 days to get to Friday
+      
+      options.push({
+        value: format(currentWeekStart, 'yyyy-MM-dd'),
+        label: `${format(currentWeekStart, 'MMM d')} - ${format(weekEnd, 'MMM d, yyyy')}`
+      });
+      
+      // Move to next week
+      currentWeekStart = addWeeks(currentWeekStart, 1);
+    }
+    
+    setWeekOptions(options);
+    
+    // Set default selected week to current week if it's in range, otherwise first week
+    const todayWeekStart = startOfWeek(today, { weekStartsOn: 1 });
+    if (todayWeekStart >= startDate && todayWeekStart <= endDate) {
+      setSelectedWeek(format(todayWeekStart, 'yyyy-MM-dd'));
+    } else {
+      setSelectedWeek(format(startDate, 'yyyy-MM-dd'));
+    }
+  };
+  
+  generateWeekOptions();
+}, []);
 
   // Check database connection when Supabase is initialized
   useEffect(() => {
@@ -2535,8 +2554,8 @@ const BDDashboard = () => {
   // Render Component - Part 3
   // ========================
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-blue-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-gradient-to-b from-sky-50 to-blue-100">
+  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-gray-900">BD Meeting Agenda</h1>
           {!connectionError && (
@@ -2880,7 +2899,9 @@ const BDDashboard = () => {
                                 aria-label="Current Revenue"
                               />
                               <div className="text-sm text-gray-600 mt-1">
-                                <span className="text-blue-600 font-medium">87.7%</span> of target
+                                <span className={`font-medium ${parseFloat(yearlyGoals.currentRevenue) / parseFloat(yearlyGoals.revenueTarget) >= 1 ? 'text-green-600' : 'text-blue-600'}`}>
+                                    {((parseFloat(yearlyGoals.currentRevenue) / parseFloat(yearlyGoals.revenueTarget)) * 100).toFixed(1)}%
+                                 </span> of target
                               </div>
                             </div>
                           </div>
@@ -2902,9 +2923,7 @@ const BDDashboard = () => {
                                 onChange={handleCurrentRetentionChange}
                                 aria-label="Current Retention"
                               />
-                              <div className="text-sm text-gray-600 mt-1">
-                                <span className="text-amber-600 font-medium">-2%</span> vs target
-                              </div>
+                              
                             </div>
                           </div>
                         </div>

@@ -2194,14 +2194,139 @@ const handleCurrentRevenueChange = (e: React.ChangeEvent<HTMLInputElement>, regi
     }
   };
 
-  // Save target (for immediate updates to the targets list)
-  const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
-    try {
-      // Function code omitted for brevity
-    } catch (error: any) {
-      // Error handling omitted for brevity
+// Save target (for immediate updates to the targets list)
+const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
+  try {
+    if (!supabase) {
+      setConnectionError('Supabase client is not initialized. Cannot save target.');
+      return;
     }
-  };
+    
+    setSaveStatus('saving');
+    
+    // First, apply the update to the local state
+    const updatedTargets = updateFn([...targets]);
+    setTargets(updatedTargets);
+    
+    // Find what changed (new, updated, or deleted targets)
+    const originalIds = new Set(targets.map(t => t.id));
+    const updatedIds = new Set(updatedTargets.map(t => t.id));
+    
+    // Targets to add (in updated but not in original)
+    const targetsToAdd = updatedTargets.filter(t => !originalIds.has(t.id));
+    
+    // Targets to remove (in original but not in updated)
+    const targetsToRemove = targets.filter(t => !updatedIds.has(t.id));
+    
+    // Targets that may have been updated (same ID in both sets)
+    const targetsToUpdate = updatedTargets.filter(t => 
+      originalIds.has(t.id) && 
+      targets.some(origT => 
+        origT.id === t.id && 
+        (origT.company !== t.company ||
+         origT.contact_name !== t.contact_name ||
+         origT.contact_title !== t.contact_title ||
+         origT.contact_email !== t.contact_email ||
+         origT.properties !== t.properties ||
+         origT.sales_rep !== t.sales_rep ||
+         origT.sales_rep_name !== t.sales_rep_name ||
+         origT.notes !== t.notes ||
+         origT.projected_value !== t.projected_value)
+      )
+    );
+    
+    // Process each type of change
+    
+    // Add new targets
+    if (targetsToAdd.length > 0) {
+      const { error: insertError } = await supabase
+        .from('targets')
+        .insert(targetsToAdd.map(t => ({
+          id: t.id.includes('-') ? undefined : t.id, // Skip ID if it's a timestamp ID
+          company: t.company,
+          contact_name: t.contact_name,
+          contact_title: t.contact_title || '',
+          contact_email: t.contact_email || '',
+          properties: t.properties || '',
+          sales_rep: t.sales_rep || '',
+          sales_rep_name: t.sales_rep_name || '',
+          notes: t.notes || '',
+          projected_value: t.projected_value || '0',
+          status: 'active',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })));
+      
+      if (insertError) {
+        console.error('Error adding targets:', insertError);
+        throw insertError;
+      }
+    }
+    
+    // Update existing targets
+    for (const target of targetsToUpdate) {
+      const { error: updateError } = await supabase
+        .from('targets')
+        .update({
+          company: target.company,
+          contact_name: target.contact_name,
+          contact_title: target.contact_title || '',
+          contact_email: target.contact_email || '',
+          properties: target.properties || '',
+          sales_rep: target.sales_rep || '',
+          sales_rep_name: target.sales_rep_name || '',
+          notes: target.notes || '',
+          projected_value: target.projected_value || '0',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', target.id);
+      
+      if (updateError) {
+        console.error(`Error updating target ${target.id}:`, updateError);
+        throw updateError;
+      }
+    }
+    
+    // Remove targets (mark as inactive rather than deleting)
+    for (const target of targetsToRemove) {
+      // Only delete if it's a real database record (not a temporary one)
+      if (!target.id.includes('-')) {
+        const { error: deleteError } = await supabase
+          .from('targets')
+          .update({
+            status: 'inactive',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', target.id);
+        
+        if (deleteError) {
+          console.error(`Error removing target ${target.id}:`, deleteError);
+          throw deleteError;
+        }
+      }
+    }
+    
+    console.log('Target(s) saved successfully');
+    setSaveStatus('success');
+    setTimeout(() => setSaveStatus('idle'), 2000);
+    
+  } catch (error: any) {
+    console.error('Error saving target:', error);
+    setSaveStatus('error');
+    setTabErrors((prev: TabErrors) => ({
+      ...prev,
+      targetList: {
+        message: 'Failed to save target',
+        details: error
+      }
+    }));
+    
+    // Roll back to previous state if there was an error
+    fetchTargetsData();
+    
+    setTimeout(() => setSaveStatus('idle'), 2000);
+  }
+};
   
   // ========================
   // Effects

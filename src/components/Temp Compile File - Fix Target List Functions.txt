@@ -1,0 +1,1170 @@
+// ========================
+// Component & Data - Part 2
+// ========================
+
+const BDDashboard = () => {
+  // Use custom Supabase hook
+  const { supabase, connectionError, setConnectionError, checkConnection, setupDatabase } = useSupabase();
+  
+  // ========================
+  // State Management
+  // ========================
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [tabErrors, setTabErrors] = useState<TabErrors>({});
+  const [isFormModified, setIsFormModified] = useState<boolean>(false);
+  
+  // Tab and week selection state
+  const [activeTab, setActiveTab] = useState<string>("level10");
+  const [visitedTabs, setVisitedTabs] = useState<string[]>(["level10"]);
+  const [selectedWeek, setSelectedWeek] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const [weekOptions, setWeekOptions] = useState<WeekOption[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  
+  // Data caching
+  const [cachedFormData, setCachedFormData] = useState<CachedFormData>({});
+  const [currentMeetingId, setCurrentMeetingId] = useState<string | null>(null);
+  const lastFetchedRef = useRef<{[key: string]: number}>({});
+  
+  // Level 10 meeting form data
+  const [formData, setFormData] = useState<FormData>({
+    attendees: '',
+    safetyMessage: '',
+    encoreValues: '',
+    closingDeals: '',
+    biddingDeals: '',
+    hotProperties: '',
+    terminationChanges: ''
+  });
+
+  // Vision Traction Organizer data
+  const [yearlyGoals, setYearlyGoals] = useState<YearlyGoals>({
+    id: null,
+    year: new Date().getFullYear(),
+    revenueTarget: '3.25',
+    revenueDescription: 'new maintenance',
+    retentionGoal: '90',
+    retentionDescription: 'customer retention',
+    currentRevenue: '2.85',  // New field
+    currentRetention: '88'   // New field
+  });
+
+  const [issuesList, setIssuesList] = useState<Issue[]>([
+    { id: null, issueText: "Create dream 100 list", isCompleted: false, assignedTo: "Sarah", dueDate: new Date() },
+    { id: null, issueText: "Monthly budgets for spend", isCompleted: false, assignedTo: "Mike", dueDate: new Date() },
+    { id: null, issueText: "Residential tree pruning fact sheet/social post", isCompleted: false, assignedTo: "Lisa", dueDate: new Date() },
+    { id: null, issueText: "Visual aids to show internal communication", isCompleted: false, assignedTo: "John", dueDate: new Date() }
+  ]);
+
+  const [quarterlyRocks, setQuarterlyRocks] = useState<QuarterlyRocks>({
+    creGroups: {
+      id: null,
+      title: 'CRE Groups & Committees',
+      assignedTo: 'Andy & Jade',
+      currentGroups: '- BOMA Executive Committee\n- NAIOP Development Committee\n- ULI Advisory Board\n- CCIM Chapter Leadership',
+      actionItems: '- Schedule Q2 committee meetings\n- Submit speaker proposal for BOMA\n- Follow up on ULI mentorship program\n- Coordinate NAIOP networking event'
+    },
+    productionRates: {
+      id: null,
+      title: 'Production Rates in Aspire',
+      assignedTo: 'Mike',
+      currentStatus: 'Implementation Phase - 75% Complete',
+      updatesNotes: '- Data migration completed for Q1\n- Team training scheduled for next week\n- New metrics dashboard in testing\n- Revenue forecasting module pending review'
+    },
+    events: {
+      id: null,
+      title: 'Q3-4 Events Planning',
+      assignedTo: 'Mike',
+      puttingWorldEvent: 'Date: September 15\nLocation: Putting World LV\nExpected Attendance: 75\nBudget Status: Approved\nKey Activities:\n- VIP area reserved\n- Catering quotes received\n- Save-the-dates scheduled for July 1',
+      lvCharcuterieEvent: 'Date: November 8\nLocation: LV Charcuterie Downtown\nExpected Attendance: 50\nBudget Status: Pending Approval\nKey Activities:\n- Venue walk-through scheduled\n- Menu selection in progress\n- Sponsorship packages drafted'
+    }
+  });
+
+  // Presentations data
+  const [meetingGuidelines, setMeetingGuidelines] = useState<Guideline[]>([
+    { id: null, guidelineText: "Copy of proposal. Know it like the back of your hand. Know the boundaries spot on.", category: "Meeting Preparation", sortOrder: 1 },
+    { id: null, guidelineText: "List of references, notable accounts & companies we work with", category: "Meeting Preparation", sortOrder: 2 },
+    { id: null, guidelineText: "Write down names of people in the meeting, refer to them by name during meeting", category: "Meeting Preparation", sortOrder: 3 }
+  ]);
+
+  const [objectionHandling, setObjectionHandling] = useState<Objection[]>([
+    { id: null, objection: "Your price is higher than competitors", rebuttal: "We focus on total cost of ownership. Our solutions include comprehensive support and proven reliability that reduces long-term expenses.", thingsToSay: "Let me show you our ROI analysis\nHere's how we've saved others money\nConsider these long-term benefits", thingsNotToSay: "We're expensive because we're the best\nOthers cut corners\nYou get what you pay for" },
+    { id: null, objection: "We're happy with current provider", rebuttal: "That's great to hear. Many of our current clients said the same before discovering how our innovative approaches could further improve their operations.", thingsToSay: "What do you like most about them?\nMay I share what sets us apart?\nCould we be your backup option?", thingsNotToSay: "They're outdated\nYou're missing out\nBut we're better" },
+    { id: null, objection: "Not in this year's budget", rebuttal: "Understanding budget constraints is important. Let's explore how our solution could fit within your current financial framework or plan for next cycle.", thingsToSay: "When does your fiscal year start?\nLet's explore financing options\nWould phased implementation help?", thingsNotToSay: "You can't afford not to\nFind the money somewhere\nIt's not that expensive" }
+  ]);
+
+  const [quickTips, setQuickTips] = useState<QuickTip[]>([
+    { id: null, category: "Opening", tipText: "Start with questions about their business challenges" },
+    { id: null, category: "Presentation", tipText: "Focus on their specific needs and ROI" },
+    { id: null, category: "Follow-up", tipText: "Always schedule next steps before leaving" }
+  ]);
+
+  // Memberships data
+  const [memberships, setMemberships] = useState<Membership[]>([
+    { id: null, salesRep: "Sarah Johnson", groups: "BOMA, NAIOP", committees: "Education Committee, Events Committee", meetingSchedule: "2nd Tuesday, 4th Thursday", meetingsAttended: 3, totalMeetings: 3, isEditing: false },
+    { id: null, salesRep: "Mike Chen", groups: "ULI", committees: "Development Council", meetingSchedule: "1st Wednesday", meetingsAttended: 2, totalMeetings: 3, isEditing: false },
+    { id: null, salesRep: "Lisa Brown", groups: "CCIM, CREW", committees: "Membership Committee", meetingSchedule: "3rd Monday", meetingsAttended: 3, totalMeetings: 3, isEditing: false },
+    { id: null, salesRep: "John Smith", groups: "NAIOP", committees: "Government Affairs", meetingSchedule: "Last Friday", meetingsAttended: 2, totalMeetings: 3, isEditing: false }
+  ]);
+
+  // Target List data
+  const [targets, setTargets] = useState<Target[]>([
+    { id: "1", contact_name: "Alex Johnson", contact_title: "Property Manager", contact_email: "alex@example.com", company: "LV Business Center", properties: "Downtown Office Building, Henderson Complex", sales_rep: "SJ", sales_rep_name: "Sarah Johnson", notes: "Interested in landscape renovation for front entrance", created_at: new Date().toISOString(), projected_value: "150" },
+    { id: "2", contact_name: "Maria Rodriguez", contact_title: "Facilities Director", contact_email: "maria@example.com", company: "Westside Medical Plaza", properties: "Main Hospital Campus, Satellite Clinics", sales_rep: "MC", sales_rep_name: "Mike Chen", notes: "Meeting scheduled for next month to discuss maintenance contract renewal", created_at: new Date().toISOString(), projected_value: "220" },
+    { id: "3", contact_name: "Thomas Wu", contact_title: "Property Owner", contact_email: "thomas@example.com", company: "Wu Properties LLC", properties: "Retail Plaza on Charleston", sales_rep: "LB", sales_rep_name: "Lisa Brown", notes: "Looking for quotes on irrigation system upgrades", created_at: new Date().toISOString(), projected_value: "80" }
+  ]);
+
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedRep, setSelectedRep] = useState<string>('');
+
+  // ========================
+  // Utility Functions
+  // ========================
+  
+  // Generate week options for the dropdown
+  useEffect(() => {
+    const generateWeekOptions = () => {
+      const options: WeekOption[] = [];
+      const today = new Date();
+      
+      // Start date: Feb 24, 2025 (Monday)
+      const startDate = new Date(2025, 1, 24); // Month is 0-indexed, so 1 = February
+      
+      // End date: Dec 31, 2025
+      const endDate = new Date(2025, 11, 31);
+      
+      // Generate all weeks in 2025 starting from Feb 24
+      let currentWeekStart = startOfWeek(startDate, { weekStartsOn: 1 });
+      
+      while (currentWeekStart <= endDate) {
+        const weekEnd = new Date(currentWeekStart);
+        weekEnd.setDate(weekEnd.getDate() + 4); // Add 4 days to get to Friday
+        
+        options.push({
+          value: format(currentWeekStart, 'yyyy-MM-dd'),
+          label: `${format(currentWeekStart, 'MMM d')} - ${format(weekEnd, 'MMM d, yyyy')}`
+        });
+        
+        // Move to next week
+        currentWeekStart = addWeeks(currentWeekStart, 1);
+      }
+      
+      setWeekOptions(options);
+      
+      // Set default selected week to current week if it's in range, otherwise first week
+      const todayWeekStart = startOfWeek(today, { weekStartsOn: 1 });
+      if (todayWeekStart >= startDate && todayWeekStart <= endDate) {
+        setSelectedWeek(format(todayWeekStart, 'yyyy-MM-dd'));
+      } else {
+        setSelectedWeek(format(startDate, 'yyyy-MM-dd'));
+      }
+    };
+    
+    generateWeekOptions();
+  }, []);
+
+  // Check database connection when Supabase is initialized
+  useEffect(() => {
+    if (supabase) {
+      checkConnection();
+    }
+  }, [supabase, checkConnection]);
+
+selectedDate,
+          currentMeetingId
+        }
+      }));
+      setIsFormModified(false);
+    }
+    
+    setSelectedWeek(value);
+  };
+
+  // Handle form input changes
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev: FormData) => ({ ...prev, [name]: value }));
+    setIsFormModified(true);
+  };
+
+  // Handle yearly goals metrics update
+  const handleMetricsUpdate = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    console.log('Updating metrics with current state values:', yearlyGoals.currentRevenue, yearlyGoals.currentRetention);
+    
+    // Use state values directly instead of DOM queries
+    saveYearlyGoals(
+      yearlyGoals.currentRevenue.toString().replace('M', ''),
+      yearlyGoals.currentRetention.toString().replace('%', '')
+    );
+  };
+
+  // Handle current revenue input change
+  const handleCurrentRevenueChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace('M', '').trim();
+    setYearlyGoals((prev: YearlyGoals) => ({
+      ...prev,
+      currentRevenue: value
+    }));
+    console.log('Current revenue updated to:', value);
+  };
+
+  // Handle current retention input change
+  const handleCurrentRetentionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace('%', '').trim();
+    setYearlyGoals((prev: YearlyGoals) => ({
+      ...prev,
+      currentRetention: value
+    }));
+    console.log('Current retention updated to:', value);
+  };
+
+  // Handle target search
+  const handleTargetSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+  };
+
+  // Handle sales rep filter
+  const handleRepFilter = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedRep(e.target.value);
+  };
+
+  // ==============================================
+  // Objection Handling Event Handlers
+  // ==============================================
+  
+  // Toggle edit mode for an objection
+  const handleObjectionEdit = (index: number) => {
+    console.log('Editing objection at index:', index);
+    setObjectionHandling((prev: Objection[]) => 
+      prev.map((obj: Objection, i: number) => 
+        i === index ? { ...obj, isEditing: true } : obj
+      )
+    );
+  };
+
+  // Update an objection field while editing
+  const handleObjectionChange = (index: number, field: keyof Objection, value: string) => {
+    setObjectionHandling((prev: Objection[]) => 
+      prev.map((obj: Objection, i: number) => 
+        i === index ? { ...obj, [field]: value } : obj
+      )
+    );
+  };
+
+  // Save an objection to state and Supabase
+  const handleObjectionSave = async (objection: Objection, isNew = false) => {
+    if (!supabase) {
+      console.error('Cannot save objection - Supabase not initialized');
+      return;
+    }
+
+    setSaveStatus('saving');
+    
+    try {
+      const objectionData = {
+        objection: objection.objection,
+        rebuttal: objection.rebuttal,
+        things_to_say: objection.thingsToSay,
+        things_not_to_say: objection.thingsNotToSay,
+        updated_at: new Date().toISOString()
+      };
+      
+      // Define explicit type for the result variable and initialize as null
+      let result: { data: any[] | null; error: any } | null = null;
+      
+      // If this is a new objection (no valid database ID)
+      if (isNew || !objection.id || objection.id.toString().startsWith('temp-')) {
+        console.log('Inserting new objection:', objectionData);
+        result = await supabase
+          .from('objection_handling')
+          .insert(objectionData)
+          .select();
+          
+        if (result && result.error) throw result.error;
+        
+        if (result && result.data && result.data.length > 0) {
+          // Replace the temporary objection with the one that has a real ID from the database
+          setObjectionHandling((prev: Objection[]) => 
+            prev.map((obj: Objection) => 
+              (obj.id === objection.id) ? 
+              { 
+                id: result!.data![0].id, 
+                objection: result!.data![0].objection,
+                rebuttal: result!.data![0].rebuttal,
+                thingsToSay: result!.data![0].things_to_say,
+                thingsNotToSay: result!.data![0].things_not_to_say,
+                isEditing: false 
+              } : obj
+            )
+          );
+        }
+      } else {
+        // This is an existing objection
+        console.log('Updating existing objection with ID:', objection.id);
+        result = await supabase
+          .from('objection_handling')
+          .update(objectionData)
+          .eq('id', objection.id)
+          .select();
+          
+        if (result && result.error) throw result.error;
+        
+        // Turn off edit mode
+        setObjectionHandling((prev: Objection[]) => 
+          prev.map((obj: Objection) => 
+            obj.id === objection.id ? { ...obj, isEditing: false } : obj
+          )
+        );
+      }
+      
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 1500);
+      
+    } catch (error: any) {
+      console.error('Error saving objection:', error);
+      setSaveStatus('error');
+      setTabErrors((prev: TabErrors) => ({
+        ...prev,
+        presentations: {
+          message: 'Failed to save objection',
+          details: error
+        }
+      }));
+      setTimeout(() => setSaveStatus('idle'), 1500);
+    }
+  };
+
+  // Delete an objection from state and Supabase
+  const handleObjectionDelete = async (index: number) => {
+    if (!supabase) {
+      console.error('Cannot delete objection - Supabase not initialized');
+      return;
+    }
+    
+    const objection = objectionHandling[index];
+    
+    setSaveStatus('saving');
+    
+    try {
+      // If the objection has a valid database ID (not a temporary one)
+      if (objection.id && !objection.id.toString().startsWith('temp-')) {
+        console.log('Deleting objection with ID:', objection.id);
+        const { error } = await supabase
+          .from('objection_handling')
+          .delete()
+          .eq('id', objection.id);
+          
+        if (error) throw error;
+      }
+      
+      // Remove from state regardless of whether it was in the database
+      setObjectionHandling((prev: Objection[]) => prev.filter((_, i: number) => i !== index));
+      
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 1500);
+      
+    } catch (error: any) {
+      console.error('Error deleting objection:', error);
+      setSaveStatus('error');
+      setTabErrors((prev: TabErrors) => ({
+        ...prev,
+        presentations: {
+          message: 'Failed to delete objection',
+          details: error
+        }
+      }));
+      setTimeout(() => setSaveStatus('idle'), 1500);
+    }
+  };
+  
+  // ==============================================
+  // Membership Event Handlers (New)
+  // ==============================================
+  
+  // Toggle edit mode for a membership
+  const handleMembershipEdit = (index: number) => {
+    console.log('Editing membership at index:', index);
+    setMemberships((prev: Membership[]) => 
+      prev.map((mem: Membership, i: number) => 
+        i === index ? { ...mem, isEditing: true } : mem
+      )
+    );
+  };
+
+  // Update a membership field while editing
+  const handleMembershipChange = (index: number, field: keyof Membership, value: string | number) => {
+    setMemberships((prev: Membership[]) => 
+      prev.map((mem: Membership, i: number) => 
+        i === index ? { ...mem, [field]: value } : mem
+      )
+    );
+  };
+
+  // Save a membership to state and Supabase
+  const handleMembershipSave = async (membership: Membership, isNew = false) => {
+    if (!supabase) {
+      console.error('Cannot save membership - Supabase not initialized');
+      return;
+    }
+
+    setSaveStatus('saving');
+    
+    try {
+      const membershipData = {
+        sales_rep: membership.salesRep,
+        groups: membership.groups,
+        committees: membership.committees,
+        meeting_schedule: membership.meetingSchedule,
+        meetings_attended: membership.meetingsAttended,
+        total_meetings: membership.totalMeetings,
+        updated_at: new Date().toISOString()
+      };
+      
+      // Define explicit type for the result variable and initialize as null
+      let result: { data: any[] | null; error: any } | null = null;
+      
+      // If this is a new membership (no valid database ID)
+      if (isNew || !membership.id || membership.id.toString().startsWith('temp-')) {
+        console.log('Inserting new membership:', membershipData);
+        result = await supabase
+          .from('association_memberships')
+          .insert(membershipData)
+          .select();
+          
+        if (result && result.error) throw result.error;
+        
+        if (result && result.data && result.data.length > 0) {
+          // Replace the temporary membership with the one that has a real ID from the database
+          setMemberships((prev: Membership[]) => 
+            prev.map((mem: Membership) => 
+              (mem.id === membership.id) ? 
+              { 
+                id: result!.data![0].id, 
+                salesRep: result!.data![0].sales_rep,
+                groups: result!.data![0].groups || '',
+                committees: result!.data![0].committees || '',
+                meetingSchedule: result!.data![0].meeting_schedule || '',
+                meetingsAttended: result!.data![0].meetings_attended || 0,
+                totalMeetings: result!.data![0].total_meetings || 0,
+                isEditing: false 
+              } : mem
+            )
+          );
+        }
+      } else {
+        // This is an existing membership
+        console.log('Updating existing membership with ID:', membership.id);
+        result = await supabase
+          .from('association_memberships')
+          .update(membershipData)
+          .eq('id', membership.id)
+          .select();
+          
+        if (result && result.error) throw result.error;
+        
+        // Turn off edit mode
+        setMemberships((prev: Membership[]) => 
+          prev.map((mem: Membership) => 
+            mem.id === membership.id ? { ...mem, isEditing: false } : mem
+          )
+        );
+      }
+      
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 1500);
+      
+    } catch (error: any) {
+      console.error('Error saving membership:', error);
+      setSaveStatus('error');
+      setTabErrors((prev: TabErrors) => ({
+        ...prev,
+        memberships: {
+          message: 'Failed to save membership',
+          details: error
+        }
+      }));
+      setTimeout(() => setSaveStatus('idle'), 1500);
+    }
+  };
+
+  // Delete a membership from state and Supabase
+  const handleMembershipDelete = async (index: number) => {
+    if (!supabase) {
+      console.error('Cannot delete membership - Supabase not initialized');
+      return;
+    }
+    
+    const membership = memberships[index];
+    
+    setSaveStatus('saving');
+    
+    try {
+      // If the membership has a valid database ID (not a temporary one)
+      if (membership.id && !membership.id.toString().startsWith('temp-')) {
+        console.log('Deleting membership with ID:', membership.id);
+        const { error } = await supabase
+          .from('association_memberships')
+          .delete()
+          .eq('id', membership.id);
+          
+        if (error) throw error;
+      }
+      
+      // Remove from state regardless of whether it was in the database
+      setMemberships((prev: Membership[]) => prev.filter((_, i: number) => i !== index));
+      
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 1500);
+      
+    } catch (error: any) {
+      console.error('Error deleting membership:', error);
+      setSaveStatus('error');
+      setTabErrors((prev: TabErrors) => ({
+        ...prev,
+        memberships: {
+          message: 'Failed to delete membership',
+          details: error
+        }
+      }));
+      setTimeout(() => setSaveStatus('idle'), 1500);
+    }
+  };
+
+  // ========================
+  // Save Functions
+  // ========================
+  
+  // Main save function
+  const saveData = async () => {
+    if (!supabase) {
+      setConnectionError('Supabase client is not initialized. Cannot save data.');
+      return;
+    }
+    
+    setIsSaving(true);
+    setSaveStatus('saving');
+    
+    try {
+      console.log(`Saving data for ${activeTab} tab for week: ${selectedWeek}`);
+      
+      if (activeTab === "level10") {
+        // Save Level 10 meeting data
+        const meetingData = {
+          meeting_date: selectedDate?.toISOString(),
+          week_start_date: selectedWeek,
+          attendees: formData.attendees,
+          safety_message: formData.safetyMessage,
+          encore_values: formData.encoreValues,
+          closing_deals: formData.closingDeals,
+          bidding_deals: formData.biddingDeals,
+          hot_properties: formData.hotProperties || '',
+          termination_changes: formData.terminationChanges || '',
+          updated_at: new Date().toISOString()
+        };
+        
+        console.log('Saving Level 10 meeting data:', meetingData);
+        // Define explicit type for the result variable and initialize as null
+        let result: { data: any[] | null; error: any } | null = null;
+        
+        if (currentMeetingId) {
+          console.log('Updating existing meeting with ID:', currentMeetingId);
+          result = await supabase
+            .from('level10_meetings')
+            .update(meetingData)
+            .eq('id', currentMeetingId)
+            .select();
+        } else {
+          console.log('Creating new meeting for week:', selectedWeek);
+          result = await supabase
+            .from('level10_meetings')
+            .insert(meetingData)
+            .select();
+        }
+        
+        if (!result) {
+          throw new Error('No result received from database operation');
+        }
+        
+        const { data, error } = result;
+        if (error) {
+          console.error('Error saving Level 10 meeting to Supabase:', error);
+          throw error;
+        }
+        
+        console.log('Level 10 meeting save successful, response:', data);
+        if (data && data.length > 0) {
+          console.log('Save successful - using current form values to prevent mismatch');
+          setCurrentMeetingId(data[0].id);
+          const saveTime = new Date().getTime();
+          window.localStorage.setItem('lastSaveTime', saveTime.toString());
+          
+          const cacheKey = `level10_${selectedWeek}`;
+          setCachedFormData((prev: CachedFormData) => ({
+            ...prev,
+            [cacheKey]: {
+              formData: { ...formData },
+              selectedDate,
+              currentMeetingId: data[0].id
+            }
+          }));
+          
+          setIsFormModified(false);
+        }
+      } else if (activeTab === "vto") {
+        try {
+          // Save yearly goals
+          const yearlyGoalsData = {
+            year: yearlyGoals.year,
+            revenue_target: parseFloat(yearlyGoals.revenueTarget) * 1000000,
+            revenue_description: yearlyGoals.revenueDescription,
+            retention_goal: parseFloat(yearlyGoals.retentionGoal),
+            retention_description: yearlyGoals.retentionDescription,
+            current_revenue: parseFloat(yearlyGoals.currentRevenue) * 1000000,
+            current_retention: parseFloat(yearlyGoals.currentRetention),
+            updated_at: new Date().toISOString()
+          };
+          
+          console.log('Saving yearly goals data:', yearlyGoalsData);
+          let yearlyGoalsResult;
+          
+          if (yearlyGoals.id) {
+            yearlyGoalsResult = await supabase
+              .from('yearly_goals')
+              .update(yearlyGoalsData)
+              .eq('id', yearlyGoals.id)
+              .select();
+          } else {
+            yearlyGoalsResult = await supabase
+              .from('yearly_goals')
+              .insert(yearlyGoalsData)
+              .select();
+          }
+          
+          if (yearlyGoalsResult.error) {
+            console.error('Error saving yearly goals:', yearlyGoalsResult.error);
+            throw yearlyGoalsResult.error;
+          }
+          
+          if (yearlyGoalsResult.data && yearlyGoalsResult.data.length > 0) {
+            setYearlyGoals((prev: YearlyGoals) => ({ ...prev, id: yearlyGoalsResult.data[0].id }));
+          }
+          
+          // Save issues list
+          console.log('Saving issues list data:', issuesList);
+          for (const issue of issuesList) {
+            const issueData = {
+              issue_text: issue.issueText,
+              is_completed: issue.isCompleted,
+              assigned_to: issue.assignedTo,
+              due_date: issue.dueDate?.toISOString().split('T')[0],
+              week_start_date: selectedWeek,
+              updated_at: new Date().toISOString()
+            };
+            
+            if (issue.id) {
+              const { error } = await supabase
+                .from('issues_list')
+                .update(issueData)
+                .eq('id', issue.id);
+                
+              if (error) {
+                console.error('Error updating issue:', error);
+                throw error;
+              }
+            } else {
+              const { data, error } = await supabase
+                .from('issues_list')
+                .insert(issueData)
+                .select();
+                
+              if (error) {
+                console.error('Error inserting issue:', error);
+                throw error;
+              }
+              
+              if (data && data.length > 0) {
+                setIssuesList((prev: Issue[]) => 
+                  prev.map((i: Issue) => 
+                    i.issueText === issue.issueText && i.id === null
+                      ? { ...i, id: data[0].id }
+                      : i
+                  )
+                );
+              }
+            }
+          }
+          
+          // Save CRE Groups rock
+          const creGroupsData = {
+            title: quarterlyRocks.creGroups.title,  // Now editable
+            category: 'CRE Groups',
+            assigned_to: quarterlyRocks.creGroups.assignedTo,  // Now editable
+            current_groups: quarterlyRocks.creGroups.currentGroups,
+            action_items: quarterlyRocks.creGroups.actionItems,
+            week_start_date: selectedWeek,
+            updated_at: new Date().toISOString()
+          };
+          
+          console.log('Saving CRE Groups data:', creGroupsData);
+          if (quarterlyRocks.creGroups.id) {
+            const { error } = await supabase
+              .from('quarterly_rocks')
+              .update(creGroupsData)
+              .eq('id', quarterlyRocks.creGroups.id);
+              
+            if (error) {
+              console.error('Error updating CRE Groups:', error);
+              throw error;
+            }
+          } else {
+            const { data, error } = await supabase
+              .from('quarterly_rocks')
+              .insert(creGroupsData)
+              .select();
+              
+            if (error) {
+              console.error('Error inserting CRE Groups:', error);
+              throw error;
+            }
+            
+            if (data && data.length > 0) {
+              setQuarterlyRocks((prev: QuarterlyRocks) => ({
+                ...prev,
+                creGroups: { ...prev.creGroups, id: data[0].id }
+              }));
+            }
+          }
+          
+          // Save Production Rates rock
+          const productionRatesData = {
+            title: quarterlyRocks.productionRates.title,  // Now editable
+            category: 'Production',
+            assigned_to: quarterlyRocks.productionRates.assignedTo,  // Now editable
+            current_status: quarterlyRocks.productionRates.currentStatus,
+            updates_notes: quarterlyRocks.productionRates.updatesNotes,
+            week_start_date: selectedWeek,
+            updated_at: new Date().toISOString()
+          };
+          
+          console.log('Saving Production Rates data:', productionRatesData);
+          if (quarterlyRocks.productionRates.id) {
+            const { error } = await supabase
+              .from('quarterly_rocks')
+              .update(productionRatesData)
+              .eq('id', quarterlyRocks.productionRates.id);
+              
+            if (error) {
+              console.error('Error updating Production Rates:', error);
+              throw error;
+            }
+          } else {
+            const { data, error } = await supabase
+              .from('quarterly_rocks')
+              .insert(productionRatesData)
+              .select();
+              
+            if (error) {
+              console.error('Error inserting Production Rates:', error);
+              throw error;
+            }
+            
+            if (data && data.length > 0) {
+              setQuarterlyRocks((prev: QuarterlyRocks) => ({
+                ...prev,
+                productionRates: { ...prev.productionRates, id: data[0].id }
+              }));
+            }
+          }
+          
+          // Parse Events data from text areas
+          const puttingWorld: {
+            name: string;
+            date: string;
+            location: string;
+            attendance: number;
+            budget_status: string;
+            activities: string[];
+          } = { 
+            name: "Putting World Event", 
+            date: "", 
+            location: "", 
+            attendance: 0, 
+            budget_status: "", 
+            activities: [] 
+          };
+          
+          const lvCharcuterie: {
+            name: string;
+            date: string;
+            location: string;
+            attendance: number;
+            budget_status: string;
+            activities: string[];
+          } = { 
+            name: "LV Charcuterie Event", 
+            date: "", 
+            location: "", 
+            attendance: 0, 
+            budget_status: "", 
+            activities: [] 
+          };
+          
+          const puttingWorldLines = quarterlyRocks.events.puttingWorldEvent.split('\n');
+          puttingWorldLines.forEach((line: string) => {
+            if (line.startsWith('Date:')) puttingWorld.date = line.replace('Date:', '').trim();
+            else if (line.startsWith('Location:')) puttingWorld.location = line.replace('Location:', '').trim();
+            else if (line.startsWith('Expected Attendance:')) puttingWorld.attendance = parseInt(line.replace('Expected Attendance:', '').trim()) || 0;
+            else if (line.startsWith('Budget Status:')) puttingWorld.budget_status = line.replace('Budget Status:', '').trim();
+            else if (line.startsWith('- ')) puttingWorld.activities.push(line.replace('- ', '').trim());
+          });
+          
+          const lvCharcuterieLines = quarterlyRocks.events.lvCharcuterieEvent.split('\n');
+          lvCharcuterieLines.forEach((line: string) => {
+            if (line.startsWith('Date:')) lvCharcuterie.date = line.replace('Date:', '').trim();
+            else if (line.startsWith('Location:')) lvCharcuterie.location = line.replace('Location:', '').trim();
+            else if (line.startsWith('Expected Attendance:')) lvCharcuterie.attendance = parseInt(line.replace('Expected Attendance:', '').trim()) || 0;
+            else if (line.startsWith('Budget Status:')) lvCharcuterie.budget_status = line.replace('Budget Status:', '').trim();
+            else if (line.startsWith('- ')) lvCharcuterie.activities.push(line.replace('- ', '').trim());
+          });
+          
+          // Save Events rock
+          const eventsData = {
+            title: quarterlyRocks.events.title,  // Now editable
+            category: 'Events',
+            assigned_to: quarterlyRocks.events.assignedTo,  // Now editable
+            event_details: JSON.stringify([puttingWorld, lvCharcuterie]),
+            week_start_date: selectedWeek,
+            updated_at: new Date().toISOString()
+          };
+          
+          console.log('Saving Events data:', eventsData);
+          if (quarterlyRocks.events.id) {
+            const { error } = await supabase
+              .from('quarterly_rocks')
+              .update(eventsData)
+              .eq('id', quarterlyRocks.events.id);
+              
+            if (error) {
+              console.error('Error updating Events:', error);
+              throw error;
+            }
+          } else {
+            const { data, error } = await supabase
+              .from('quarterly_rocks')
+              .insert(eventsData)
+              .select();
+              
+            if (error) {
+              console.error('Error inserting Events:', error);
+              throw error;
+            }
+            
+            if (data && data.length > 0) {
+              setQuarterlyRocks((prev: QuarterlyRocks) => ({
+                ...prev,
+                events: { ...prev.events, id: data[0].id }
+              }));
+            }
+          }
+        } catch (vtoError: any) {
+          console.error('Error saving VTO data:', vtoError);
+          throw vtoError;
+        }
+      } else if (activeTab === "presentations") {
+        // Presentations tab save logic here (omitted for brevity)
+      } else if (activeTab === "memberships") {
+        // Memberships tab save logic here (omitted for brevity)
+      } else if (activeTab === "targetList") {
+        // Target list tab save logic here (omitted for brevity)
+      }
+      
+      console.log(`Successfully saved ${activeTab} data`);
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    } catch (error: any) {
+      console.error('Error saving data:', error);
+      
+      // Extract more detailed error information
+      let errorDetails = '';
+      if (error) {
+        if (error.message) {
+          errorDetails = error.message;
+        } else if (error.details) {
+          errorDetails = typeof error.details === 'string' ? error.details : JSON.stringify(error.details);
+        } else if (error.code) {
+          errorDetails = `Error code: ${error.code}`;
+        } else if (typeof error === 'object') {
+          errorDetails = JSON.stringify(error);
+        } else {
+          errorDetails = String(error);
+        }
+      }
+      
+      // If we've got an empty object as a string, provide more context
+      if (errorDetails === '{}') {
+        errorDetails = 'Empty error object returned from Supabase. Check your database permissions and schema.';
+      }
+      
+      setSaveStatus('error');
+      setTabErrors((prev: TabErrors) => ({
+        ...prev,
+        [activeTab]: {
+          message: `Failed to save ${activeTab} data: ${errorDetails}`,
+          details: error
+        }
+      }));
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Save yearly goals separately
+  const saveYearlyGoals = async (currentRevenueStr?: string, currentRetentionStr?: string) => {
+    if (!supabase) return;
+    
+    setSaveStatus('saving');
+    
+    try {
+      // Use parameters if provided, otherwise use state values
+      const revenueToSave = currentRevenueStr || yearlyGoals.currentRevenue;
+      const retentionToSave = currentRetentionStr || yearlyGoals.currentRetention;
+      console.log('Saving yearly goals with metrics:', revenueToSave, retentionToSave);
+      
+      const yearlyGoalsData = {
+        year: yearlyGoals.year,
+        revenue_target: parseFloat(yearlyGoals.revenueTarget) * 1000000,
+        revenue_description: yearlyGoals.revenueDescription,
+        retention_goal: parseFloat(yearlyGoals.retentionGoal),
+        retention_description: yearlyGoals.retentionDescription,
+        current_revenue: parseFloat(revenueToSave) * 1000000,
+        current_retention: parseFloat(retentionToSave),
+        updated_at: new Date().toISOString()
+      };
+      
+      console.log('Saving yearly goals data:', yearlyGoalsData);
+      // Define explicit type for the result variable and initialize as null
+      let result: { data: any[] | null; error: any } | null = null;
+      
+      if (yearlyGoals.id) {
+        console.log('Updating existing yearly goals with ID:', yearlyGoals.id);
+        result = await supabase
+          .from('yearly_goals')
+          .update(yearlyGoalsData)
+          .eq('id', yearlyGoals.id)
+          .select();
+      } else {
+        console.log('Creating new yearly goals entry');
+        result = await supabase
+          .from('yearly_goals')
+          .insert(yearlyGoalsData)
+          .select();
+      }
+      
+      if (result && result.error) {
+        console.error('Error saving yearly goals:', result.error);
+        throw result.error;
+      }
+      
+      console.log('Yearly goals save successful, response:', result?.data);
+      if (result && result.data && result.data.length > 0) {
+        console.log('Updating state with new yearly goals ID');
+        setYearlyGoals((prev: YearlyGoals) => ({
+          ...prev,
+          id: result!.data![0].id,
+          currentRevenue: revenueToSave,
+          currentRetention: retentionToSave
+        }));
+      }
+      
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 1500);
+    } catch (error: any) {
+      console.error('Error saving yearly goals:', error);
+      setSaveStatus('error');
+      setTabErrors((prev: TabErrors) => ({
+        ...prev,
+        vto: {
+          message: 'Failed to save yearly goals',
+          details: error
+        }
+      }));
+      setTimeout(() => setSaveStatus('idle'), 1500);
+    }
+  };
+
+  // Save target (for immediate updates to the targets list)
+  const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
+    try {
+      if (!supabase) {
+        setConnectionError('Supabase client is not initialized. Cannot save target.');
+        return;
+      }
+      
+      setSaveStatus('saving');
+      
+      // First, apply the update to the local state
+      const updatedTargets = updateFn([...targets]);
+      setTargets(updatedTargets);
+      
+      // Find what changed (new, updated, or deleted targets)
+      const originalIds = new Set(targets.map(t => t.id));
+      const updatedIds = new Set(updatedTargets.map(t => t.id));
+      
+      // Targets to add (in updated but not in original)
+      const targetsToAdd = updatedTargets.filter(t => !originalIds.has(t.id));
+      
+      // Targets to remove (in original but not in updated)
+      const targetsToRemove = targets.filter(t => !updatedIds.has(t.id));
+      
+      // Targets that may have been updated (same ID in both sets)
+      const targetsToUpdate = updatedTargets.filter(t => 
+        originalIds.has(t.id) && 
+        targets.some(origT => 
+          origT.id === t.id && 
+          (origT.company !== t.company ||
+           origT.contact_name !== t.contact_name ||
+           origT.contact_title !== t.contact_title ||
+           origT.contact_email !== t.contact_email ||
+           origT.properties !== t.properties ||
+           origT.sales_rep !== t.sales_rep ||
+           origT.sales_rep_name !== t.sales_rep_name ||
+           origT.notes !== t.notes ||
+           origT.projected_value !== t.projected_value)
+        )
+      );
+      
+      // Process each type of change
+      
+      // Add new targets
+      if (targetsToAdd.length > 0) {
+        const { error: insertError } = await supabase
+          .from('targets')
+          .insert(targetsToAdd.map(t => ({
+            id: t.id.includes('-') ? undefined : t.id, // Skip ID if it's a timestamp ID
+            company: t.company,
+            contact_name: t.contact_name,
+            contact_title: t.contact_title || '',
+            contact_email: t.contact_email || '',
+            properties: t.properties || '',
+            sales_rep: t.sales_rep || '',
+            sales_rep_name: t.sales_rep_name || '',
+            notes: t.notes || '',
+            projected_value: t.projected_value || '0',
+            status: 'active',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })));
+        
+        if (insertError) {
+          console.error('Error adding targets:', insertError);
+          throw insertError;
+        }
+      }
+      
+      // Update existing targets
+      for (const target of targetsToUpdate) {
+        const { error: updateError } = await supabase
+          .from('targets')
+          .update({
+            company: target.company,
+            contact_name: target.contact_name,
+            contact_title: target.contact_title || '',
+            contact_email: target.contact_email || '',
+            properties: target.properties || '',
+            sales_rep: target.sales_rep || '',
+            sales_rep_name: target.sales_rep_name || '',
+            notes: target.notes || '',
+            projected_value: target.projected_value || '0',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', target.id);
+        
+        if (updateError) {
+          console.error(`Error updating target ${target.id}:`, updateError);
+          throw updateError;
+        }
+      }
+      
+      // Remove targets (mark as inactive rather than deleting)
+      for (const target of targetsToRemove) {
+        // Only delete if it's a real database record (not a temporary one)
+        if (!target.id.includes('-')) {
+          const { error: deleteError } = await supabase
+            .from('targets')
+            .update({
+              status: 'inactive',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', target.id);
+          
+          if (deleteError) {
+            console.error(`Error removing target ${target.id}:`, deleteError);
+            throw deleteError;
+          }
+        }
+      }
+      
+      console.log('Target(s) saved successfully');
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+      
+    } catch (error: any) {
+      console.error('Error saving target:', error);
+      setSaveStatus('error');
+      setTabErrors((prev: TabErrors) => ({
+        ...prev,
+        targetList: {
+          message: 'Failed to save target',
+          details: error
+        }
+      }));
+      
+      // Roll back to previous state if there was an error
+      fetchTargetsData();
+      
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    }
+  };
+  
+  // ========================
+  // Effects
+  // ========================
+  
+  // Fetch data when tab or week changes
+  useEffect(() => {
+    if (connectionError) return;
+    
+    if (activeTab === "level10") {
+      const cacheKey = `level10_${selectedWeek}`;
+      const cachedData = cachedFormData[cacheKey];
+      
+      if (cachedData) {
+        console.log('Loading from cache:', cacheKey);
+        setFormData(cachedData.formData);
+        setSelectedDate(cachedData.selectedDate);
+        setCurrentMeetingId(cachedData.currentMeetingId);
+        setIsFormModified(false);
+      } else {
+        console.log('No cache found, fetching from database');
+        fetchMeetingForWeek(selectedWeek);
+      }
+    } else {
+      fetchData();
+    }
+  }, [activeTab, selectedWeek, connectionError, fetchData, fetchMeetingForWeek, cachedFormData]);
+
+  // Filter targets based on search and rep selection
+  const filteredTargets = targets.filter((target: Target) => {
+    const matchesSearch = searchQuery === '' || 
+      target.contact_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      target.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      target.properties?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      target.notes?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+    const matchesRep = selectedRep === '' || target.sales_rep === selectedRep;
+    
+    return matchesSearch && matchesRep;
+  });

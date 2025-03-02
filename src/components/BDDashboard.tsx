@@ -2712,8 +2712,8 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
       Update Las Vegas Metrics
     </Button>
   </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white p-4 rounded-xl border border-yellow-200">
-                          <div className="bg-white p-6 rounded-xl border border-gray-200 transition-all duration-200 hover:shadow-md">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white p-4 rounded-xl border border-black">
+                          <div className="bg-white p-6 rounded-xl border border-gray-400 transition-all duration-200 hover:shadow-md">
                             <div className="text-sm text-gray-600 mb-2">Revenue</div>
                             <div className="flex justify-between">
                               <div>
@@ -2738,7 +2738,7 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
                               </div>
                             </div>
                           </div>
-                          <div className="bg-white p-6 rounded-xl border border-gray-200 transition-all duration-200 hover:shadow-md">
+                          <div className="bg-white p-6 rounded-xl border border-gray-400 transition-all duration-200 hover:shadow-md">
                             <div className="text-sm text-gray-600 mb-2">Retention</div>
                             <div className="flex justify-between">
                               <div>
@@ -2780,8 +2780,8 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
       Update Phoenix Metrics
     </Button>
   </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white p-4 rounded-xl border border-orange-200">
-                          <div className="bg-white p-6 rounded-xl border border-gray-200 transition-all duration-200 hover:shadow-md">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white p-4 rounded-xl border border-black">
+                          <div className="bg-white p-6 rounded-xl border border-gray-400 transition-all duration-200 hover:shadow-md">
                             <div className="text-sm text-gray-600 mb-2">Revenue</div>
                             <div className="flex justify-between">
                               <div>
@@ -2806,7 +2806,7 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
                               </div>
                             </div>
                           </div>
-                          <div className="bg-white p-6 rounded-xl border border-gray-200 transition-all duration-200 hover:shadow-md">
+                          <div className="bg-white p-6 rounded-xl border border-gray-400 transition-all duration-200 hover:shadow-md">
                             <div className="text-sm text-gray-600 mb-2">Retention</div>
                             <div className="flex justify-between">
                               <div>

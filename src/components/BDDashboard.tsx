@@ -3814,8 +3814,8 @@ const filteredTargets = targets.filter((target: Target) => {
                                     <Target className="h-8 w-8 text-red-400 mb-2" />
                                     <p className="text-lg font-medium">No targets found</p>
                                     <p className="text-sm text-gray-500">
-                                      {searchQuery || selectedRep ? 'Try adjusting your search or filters' : 'Add your first target company to get started'}
-                                    </p>
+  {searchQuery ? 'Try adjusting your search' : 'Add your first target company to get started'}
+</p>
                                   </div>
                                 </td>
                               </tr>

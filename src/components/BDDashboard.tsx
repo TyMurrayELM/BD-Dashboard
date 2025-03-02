@@ -2702,7 +2702,7 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
                       <div className="mb-8">
   <div className="flex items-center mb-4">
     <img src="/icons/lv.png" alt="Las Vegas" className="h-6 w-6 mr-2" />
-    <h3 className="text-lg font-semibold text-yellow-800">Las Vegas Region</h3>
+    <h3 className="text-lg font-semibold text-yellow-800">Las Vegas</h3>
     <Button 
       variant="ghost" 
       size="sm"
@@ -2770,7 +2770,7 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
                       <div>
                       <div className="flex items-center mb-4">
     <img src="/icons/az.png" alt="Phoenix" className="h-6 w-6 mr-2" />
-    <h3 className="text-lg font-semibold text-orange-800">Phoenix Region</h3>
+    <h3 className="text-lg font-semibold text-orange-800">Phoenix</h3>
     <Button 
       variant="ghost" 
       size="sm"

@@ -29,7 +29,6 @@ import {
   ShieldQuestion, // For Obejctions
   UsersRound, // add this for Association Memberships
   TrendingUp, // for header
-  Golf, // for Putting World
 } from 'lucide-react';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, isSameDay } from 'date-fns';

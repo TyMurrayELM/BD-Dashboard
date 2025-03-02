@@ -757,7 +757,7 @@ const BDDashboard = () => {
   ]);
 
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedRep, setSelectedRep] = useState<string>('');
+  
 
   // ========================
   // Utility Functions
@@ -1426,10 +1426,7 @@ const handleCurrentRevenueChange = (e: React.ChangeEvent<HTMLInputElement>, regi
     setSearchQuery(e.target.value);
   };
 
-  // Handle sales rep filter
-  const handleRepFilter = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSelectedRep(e.target.value);
-  };
+
 
   // ==============================================
   // Objection Handling Event Handlers
@@ -2483,17 +2480,14 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
   }, [activeTab, selectedWeek, connectionError, fetchData, fetchMeetingForWeek, cachedFormData]);
 
   // Filter targets based on search and rep selection
-  const filteredTargets = targets.filter((target: Target) => {
-    const matchesSearch = searchQuery === '' || 
-      target.contact_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      target.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      target.properties?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      target.notes?.toLowerCase().includes(searchQuery.toLowerCase());
-      
-    const matchesRep = selectedRep === '' || target.sales_rep === selectedRep;
-    
-    return matchesSearch && matchesRep;
-  });
+  // Filter targets based on search
+const filteredTargets = targets.filter((target: Target) => {
+  return searchQuery === '' || 
+    target.contact_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    target.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    target.properties?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    target.notes?.toLowerCase().includes(searchQuery.toLowerCase());
+});
 // ========================
   // Render Component - Part 3
   // ========================
@@ -3659,30 +3653,16 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
                         </Button>
                       </div>
                       
-                      {/* Search and Filter Controls */}
-                      <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                        <div className="flex-1">
-                          <Input
-                            className="border border-gray-200"
-                            placeholder="Search companies or contacts..."
-                            value={searchQuery}
-                            onChange={handleTargetSearch}
-                          />
-                        </div>
-                        <div className="w-full sm:w-48">
-                          <select
-                            className="w-full p-2 border border-gray-200 rounded-md"
-                            value={selectedRep}
-                            onChange={handleRepFilter}
-                          >
-                            <option value="">All Reps</option>
-                            <option value="SJ">Sarah Johnson</option>
-                            <option value="MC">Mike Chen</option>
-                            <option value="LB">Lisa Brown</option>
-                            <option value="JS">John Smith</option>
-                          </select>
-                        </div>
-                      </div>
+                      
+                      {/* Search Controls */}
+<div className="mb-4">
+  <Input
+    className="border border-gray-200"
+    placeholder="Search companies or contacts..."
+    value={searchQuery}
+    onChange={handleTargetSearch}
+  />
+</div>
 
                       {/* Main Target List Table */}
                       <div className="overflow-x-auto border border-gray-200 rounded-lg shadow-sm">

@@ -29,6 +29,7 @@ import {
   ShieldQuestion, // For Obejctions
   UsersRound, // add this for Association Memberships
   TrendingUp, // for header
+  Golf, // for Putting World
 } from 'lucide-react';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, isSameDay } from 'date-fns';
@@ -2861,7 +2862,7 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
                     </div>
                     
                     {/* Issues List */}
-                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                    <div className="bg-white p-6 rounded-xl border border-gray-300 shadow-sm">
   <div className="flex items-center mb-4">
     <ClipboardList className="h-5 w-5 text-gray-600 mr-2" />
     <h3 className="text-lg font-semibold text-gray-800">Issues List</h3>

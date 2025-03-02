@@ -23,6 +23,11 @@ import {
   Handshake,// add this import for deals being closed
   FileX, // for Terminations
   FileText, // for Bidding
+  Mountain, // for Rocks
+  ClipboardList, // for Issues List
+  ClipboardCheck, // add this for meeting notes/guidelines
+  ShieldQuestion, // For Obejctions
+  UsersRound, // add this for Association Memberships
 } from 'lucide-react';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, isSameDay } from 'date-fns';
@@ -2583,7 +2588,7 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
                         <div className="bg-gradient-to-r from-blue-50 to-white rounded-xl p-6 border border-blue-100 shadow-sm">
                           <div className="flex items-center mb-4">
                             <div className="h-8 w-1 bg-blue-500 rounded-full mr-3"></div>
-                            <h3 className="text-sm font-medium text-gray-700">Week Range</h3>
+                            <h3 className="text-sm font-medium text-gray-700">Meeting Week</h3>
                           </div>
                           <p className="font-medium text-blue-800">{selectedWeek ? weekOptions.find((opt: WeekOption) => opt.value === selectedWeek)?.label : 'Current Week'}</p>
                         </div>
@@ -2728,7 +2733,7 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
       Update Las Vegas Metrics
     </Button>
   </div>
-  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gradient-to-r from-yellow-200 via-amber-50 to-yellow-50 p-4 rounded-xl border border-black">
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gradient-to-r from-yellow-100 via-amber-50 to-yellow-50 p-4 rounded-xl border border-black">
                           <div className="bg-white p-6 rounded-xl border border-gray-400 transition-all duration-200 hover:shadow-md">
                             <div className="text-sm text-gray-600 mb-2">Revenue</div>
                             <div className="flex justify-between">
@@ -2796,7 +2801,7 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
       Update Phoenix Metrics
     </Button>
   </div>
-  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gradient-to-r from-orange-200 via-white-50 to-orange-50 p-4 rounded-xl border border-black">
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gradient-to-r from-orange-100 via-white-50 to-orange-50 p-4 rounded-xl border border-black">
                           <div className="bg-white p-6 rounded-xl border border-gray-400 transition-all duration-200 hover:shadow-md">
                             <div className="text-sm text-gray-600 mb-2">Revenue</div>
                             <div className="flex justify-between">
@@ -2853,8 +2858,12 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
                     
                     {/* Issues List */}
                     <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                      <SectionHeader title="Issues List" />
-                      <div className="space-y-4">
+  <div className="flex items-center mb-4">
+    <ClipboardList className="h-5 w-5 text-gray-600 mr-2" />
+    <h3 className="text-lg font-semibold text-gray-800">Issues List</h3>
+  </div>
+  <div className="h-1 w-20 bg-blue-600 mt-2 rounded-full"></div>
+  <div className="space-y-4">
                         {issuesList.map((issue: Issue, index: number) => (
                           <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg transition-all duration-200 hover:bg-gray-100">
                             <input 
@@ -2918,8 +2927,12 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
                     
                     {/* Quarterly Rocks Section */}
                     <div className="bg-blue-50 p-6 rounded-xl border border-blue-200">
-                      <SectionHeader title="Quarterly Rocks" />
-                      <div className="space-y-6">
+  <div className="flex items-center mb-4">
+    <Mountain className="h-5 w-5 text-blue-600 mr-2" />
+    <h3 className="text-lg font-semibold text-gray-800">Quarterly Rocks</h3>
+  </div>
+  <div className="h-1 w-20 bg-blue-600 mt-2 rounded-full"></div>
+  <div className="space-y-6">
                         {/* CRE Groups & Committees */}
                         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
@@ -3150,44 +3163,51 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
                   </TabsContent>
 
                   {/* Presentations Tab */}
-                  <TabsContent value="presentations">
-                    <div className="space-y-6">
-                      {/* Guidelines Section */}
-                      <div className="bg-purple-50 p-6 rounded-xl border border-purple-200">
-                        <SectionHeader title="Notes/Always bring to a meeting:" />
-                        <ul className="space-y-3 text-purple-900">
-                          {meetingGuidelines.map((guideline: Guideline, index: number) => (
-                            <li key={index} className="flex items-start p-3 bg-white rounded-lg border border-purple-100">
-                              <span className="mr-3 text-purple-500">•</span>
-                              {guideline.guidelineText}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
+<TabsContent value="presentations">
+  <div className="space-y-6">
+    {/* Guidelines Section */}
+    <div className="bg-purple-50 p-6 rounded-xl border border-purple-200">
+      <div className="flex items-center mb-4">
+        <ClipboardCheck className="h-5 w-5 text-purple-600 mr-2" />
+        <h3 className="text-lg font-semibold text-gray-800">Notes/Always bring to a meeting:</h3>
+      </div>
+      <div className="h-1 w-20 bg-purple-600 mt-2 rounded-full"></div>
+      <ul className="space-y-3 text-purple-900">
+        {meetingGuidelines.map((guideline: Guideline, index: number) => (
+          <li key={index} className="flex items-start p-3 bg-white rounded-lg border border-purple-100">
+            <span className="mr-3 text-purple-500">•</span>
+            {guideline.guidelineText}
+          </li>
+        ))}
+      </ul>
+    </div>
 
                       {/* Objection Handling Table */}
-                      <div className="rounded-xl border border-gray-200 overflow-hidden">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between p-6 border-b bg-white">
-                          <h3 className="text-lg font-bold text-gray-800">Objection Handling</h3>
-                          <Button 
-                            className="bg-purple-600 hover:bg-purple-700 text-white mt-3 sm:mt-0"
-                            onClick={() => {
-                              const newObjection = {
-                                id: `temp-${Date.now()}`,
-                                objection: "New objection",
-                                rebuttal: "How to handle it",
-                                thingsToSay: "Recommended phrases",
-                                thingsNotToSay: "Phrases to avoid",
-                                isEditing: true
-                              };
-                              setObjectionHandling([...objectionHandling, newObjection]);
-                              // Set the new objection as being edited
-                              handleObjectionSave(newObjection, true);
-                            }}
-                          >
-                            + Add New Entry
-                          </Button>
-                        </div>
+<div className="rounded-xl border border-gray-200 overflow-hidden">
+  <div className="flex flex-col sm:flex-row sm:items-center justify-between p-6 border-b bg-white">
+    <div className="flex items-center">
+      <ShieldQuestion className="h-5 w-5 text-purple-600 mr-2" />
+      <h3 className="text-lg font-bold text-gray-800">Objection Handling</h3>
+    </div>
+    <Button 
+      className="bg-purple-600 hover:bg-purple-700 text-white mt-3 sm:mt-0"
+      onClick={() => {
+        const newObjection = {
+          id: `temp-${Date.now()}`,
+          objection: "New objection",
+          rebuttal: "How to handle it",
+          thingsToSay: "Recommended phrases",
+          thingsNotToSay: "Phrases to avoid",
+          isEditing: true
+        };
+        setObjectionHandling([...objectionHandling, newObjection]);
+        // Set the new objection as being edited
+        handleObjectionSave(newObjection, true);
+      }}
+    >
+      + Add New Entry
+    </Button>
+  </div>
                         <div className="overflow-x-auto">
                           <table className="w-full">
                             <thead>
@@ -3309,30 +3329,33 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
                   </TabsContent>
                   
                   {/* Memberships Tab Content */}
-                  <TabsContent value="memberships">
-                    <div className="space-y-6">
-                      <div className="flex items-center justify-between">
-                        <h2 className="text-xl font-bold">Association Memberships</h2>
-                        <Button 
-                          className="bg-orange-600 hover:bg-orange-700 text-white"
-                          onClick={() => {
-                            const newMembership = {
-                              id: `temp-${Date.now()}`,
-                              salesRep: "New Rep",
-                              groups: "",
-                              committees: "",
-                              meetingSchedule: "",
-                              meetingsAttended: 0,
-                              totalMeetings: 0,
-                              isEditing: true
-                            };
-                            setMemberships([...memberships, newMembership]);
-                            handleMembershipSave(newMembership, true);
-                          }}
-                        >
-                          + Add Membership
-                        </Button>
-                      </div>
+<TabsContent value="memberships">
+  <div className="space-y-6">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center">
+        <UsersRound className="h-5 w-5 text-orange-600 mr-2" />
+        <h2 className="text-xl font-bold">Association Memberships</h2>
+      </div>
+      <Button 
+        className="bg-orange-600 hover:bg-orange-700 text-white"
+        onClick={() => {
+          const newMembership = {
+            id: `temp-${Date.now()}`,
+            salesRep: "New Rep",
+            groups: "",
+            committees: "",
+            meetingSchedule: "",
+            meetingsAttended: 0,
+            totalMeetings: 0,
+            isEditing: true
+          };
+          setMemberships([...memberships, newMembership]);
+          handleMembershipSave(newMembership, true);
+        }}
+      >
+        + Add Membership
+      </Button>
+    </div>
 
                       {/* Memberships Table */}
                       <div className="rounded-xl border">

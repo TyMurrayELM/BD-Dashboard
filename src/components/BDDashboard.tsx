@@ -2588,8 +2588,8 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
                         <h2 className="text-xl font-bold text-gray-800">Level 10 Meeting <span className="text-blue-600">Tracker</span></h2>
                       </div>
                       
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="bg-gradient-to-r from-blue-50 to-white rounded-xl p-6 border border-blue-100 shadow-sm">
+                      <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
+                      <div className="lg:col-span-2 bg-gradient-to-r from-blue-50 to-white rounded-xl p-6 border border-blue-100 shadow-sm">
                           <div className="flex items-center mb-4">
                             <div className="h-8 w-1 bg-blue-500 rounded-full mr-3"></div>
                             <h3 className="text-sm font-medium text-gray-700">Meeting Week</h3>
@@ -2597,7 +2597,7 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
                           <p className="font-medium text-blue-800">{selectedWeek ? weekOptions.find((opt: WeekOption) => opt.value === selectedWeek)?.label : 'Current Week'}</p>
                         </div>
                         
-                        <div className="bg-gradient-to-r from-indigo-50 to-white rounded-xl p-6 border border-indigo-100 shadow-sm">
+                        <div className="lg:col-span-5 bg-gradient-to-r from-indigo-50 to-white rounded-xl p-6 border border-indigo-100 shadow-sm">
   <FormField
     label="Attendees"
     name="attendees"
@@ -2608,7 +2608,7 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
   />
 </div>
                         
-                        <div className="bg-gradient-to-r from-sky-50 to-white rounded-xl p-6 border border-sky-100 shadow-sm">
+<div className="lg:col-span-3 bg-gradient-to-r from-sky-50 to-white rounded-xl p-6 border border-sky-100 shadow-sm">
   <FormField
     label="Safety Message"
     name="safetyMessage"
@@ -3187,7 +3187,7 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
     </div>
 
                       {/* Objection Handling Table */}
-<div className="rounded-xl border border-gray-200 overflow-hidden">
+<div className="rounded-xl border border-gray-300 overflow-hidden">
   <div className="flex flex-col sm:flex-row sm:items-center justify-between p-6 border-b bg-white">
     <div className="flex items-center">
       <ShieldQuestion className="h-5 w-5 text-purple-600 mr-2" />

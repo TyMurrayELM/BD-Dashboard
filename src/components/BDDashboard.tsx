@@ -17,7 +17,12 @@ import {
   Loader2, 
   Calendar as CalendarIcon,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  ShieldAlert,  // Add this for a safety icon
+  CheckSquare, // add this import for deals being closed
+  Handshake,// add this import for deals being closed
+  FileX, // for Terminations
+  FileText, // for Bidding
 } from 'lucide-react';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, isSameDay } from 'date-fns';
@@ -485,6 +490,7 @@ interface FormFieldProps {
   onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   placeholder: string;
   isTextArea?: boolean;
+  icon?: React.ReactNode; // Add this line
 }
 
 const FormField = ({ 
@@ -493,12 +499,16 @@ const FormField = ({
   value, 
   onChange, 
   placeholder, 
-  isTextArea = false 
+  isTextArea = false,
+  icon // Add this parameter
 }: FormFieldProps) => (
   <div className="space-y-2 transition-all duration-200 hover:shadow-sm">
-    <label className="block text-sm font-medium text-gray-700">
-      {label}
-    </label>
+    <div className="flex items-center">
+      {icon && <span className="mr-2">{icon}</span>}
+      <label className="block text-sm font-medium text-gray-700">
+        {label}
+      </label>
+    </div>
     {isTextArea ? (
       <textarea
         name={name}
@@ -2579,104 +2589,110 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
                         </div>
                         
                         <div className="bg-gradient-to-r from-indigo-50 to-white rounded-xl p-6 border border-indigo-100 shadow-sm">
-                          <FormField
-                            label="Attendees"
-                            name="attendees"
-                            value={formData.attendees}
-                            onChange={handleInputChange}
-                            placeholder="Enter attendees"
-                          />
-                        </div>
+  <FormField
+    label="Attendees"
+    name="attendees"
+    value={formData.attendees}
+    onChange={handleInputChange}
+    placeholder="Enter attendees"
+    icon={<Users className="h-5 w-5 text-indigo-500" />}
+  />
+</div>
                         
                         <div className="bg-gradient-to-r from-sky-50 to-white rounded-xl p-6 border border-sky-100 shadow-sm">
-                          <FormField
-                            label="Safety Message"
-                            name="safetyMessage"
-                            value={formData.safetyMessage}
-                            onChange={handleInputChange}
-                            placeholder="Enter safety message of the week"
-                          />
-                        </div>
+  <FormField
+    label="Safety Message"
+    name="safetyMessage"
+    value={formData.safetyMessage}
+    onChange={handleInputChange}
+    placeholder="Enter safety message of the week"
+    icon={<ShieldAlert className="h-5 w-5 text-sky-500" />}
+  />
+</div>
                       </div>
 
                       <div className="bg-gradient-to-r from-blue-50 via-white to-blue-50 rounded-xl p-6 border border-blue-100 shadow-sm">
-                        <div className="mb-4 flex items-center">
-                          <div className="h-2 w-2 bg-blue-600 rounded-full mr-2"></div>
-                          <h3 className="text-lg font-medium text-blue-600">EnCore Values/Sales Story</h3>
-                        </div>
-                        <FormField
-                          label=""
-                          name="encoreValues"
-                          value={formData.encoreValues}
-                          onChange={handleInputChange}
-                          placeholder="Share success story or learning experience"
-                          isTextArea
-                        />
-                      </div>
+  <div className="mb-4 flex items-center">
+    <img 
+      src="/icons/agave.png" 
+      alt="Agave Icon" 
+      className="h-5 w-8 mr-2" 
+    />
+    <h3 className="text-lg font-medium text-blue-600">EnCore Values/Sales Story</h3>
+  </div>
+  <FormField
+    label=""
+    name="encoreValues"
+    value={formData.encoreValues}
+    onChange={handleInputChange}
+    placeholder="Share success story or learning experience"
+    isTextArea
+  />
+</div>
 
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <div className="space-y-6">
-                          <div className="bg-gradient-to-br from-green-50 to-white rounded-xl p-6 border border-green-100 shadow-sm hover:shadow-md transition-shadow">
-                            <div className="mb-4 flex items-center">
-                              <div className="h-2 w-2 bg-green-600 rounded-full mr-2"></div>
-                              <h3 className="text-lg font-medium text-green-700">What We're Closing <span className="text-sm font-normal text-gray-500">(10 minutes)</span></h3>
-                            </div>
-                            <FormField
-                              label=""
-                              name="closingDeals"
-                              value={formData.closingDeals}
-                              onChange={handleInputChange}
-                              placeholder="Update on deals close to signing"
-                              isTextArea
-                            />
-                          </div>
+                        <div className="bg-gradient-to-br from-green-50 to-white rounded-xl p-6 border border-green-100 shadow-sm hover:shadow-md transition-shadow">
+  <div className="mb-4 flex items-center">
+    <Handshake className="h-5 w-5 text-green-600 mr-2" />
+    <h3 className="text-lg font-medium text-green-700">What We're Closing <span className="text-sm font-normal text-gray-500">(10 minutes)</span></h3>
+  </div>
+  <FormField
+    label=""
+    name="closingDeals"
+    value={formData.closingDeals}
+    onChange={handleInputChange}
+    placeholder="Update on deals close to signing"
+    isTextArea
+  />
+</div>
 
-                          <div className="bg-gradient-to-br from-yellow-50 to-white rounded-xl p-6 border border-yellow-100 shadow-sm hover:shadow-md transition-shadow">
-                            <div className="mb-4 flex items-center">
-                              <div className="h-2 w-2 bg-yellow-600 rounded-full mr-2"></div>
-                              <h3 className="text-lg font-medium text-yellow-700">Hot Properties</h3>
-                            </div>
-                            <FormField
-                              label=""
-                              name="hotProperties"
-                              value={formData.hotProperties || ''}
-                              onChange={handleInputChange}
-                              placeholder="Properties with high potential or activity"
-                              isTextArea
-                            />
-                          </div>
+<div className="bg-gradient-to-br from-yellow-50 to-white rounded-xl p-6 border border-yellow-100 shadow-sm hover:shadow-md transition-shadow">
+  <div className="mb-4 flex items-center">
+    <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2" />
+    <h3 className="text-lg font-medium text-yellow-700">Hot Properties</h3>
+  </div>
+  <FormField
+    label=""
+    name="hotProperties"
+    value={formData.hotProperties || ''}
+    onChange={handleInputChange}
+    placeholder="Properties with high potential or activity"
+    isTextArea
+  />
+</div>
                         </div>
                         
                         <div className="space-y-6">
-                          <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-6 border border-blue-100 shadow-sm hover:shadow-md transition-shadow">
-                            <div className="mb-4 flex items-center">
-                              <div className="h-2 w-2 bg-blue-600 rounded-full mr-2"></div>
-                              <h3 className="text-lg font-medium text-blue-700">What We're Bidding <span className="text-sm font-normal text-gray-500">(20 minutes)</span></h3>
-                            </div>
-                            <FormField
-                              label=""
-                              name="biddingDeals"
-                              value={formData.biddingDeals}
-                              onChange={handleInputChange}
-                              placeholder="Current bid status and updates"
-                              isTextArea
-                            />
-                          </div>
+                        <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-6 border border-blue-100 shadow-sm hover:shadow-md transition-shadow">
+  <div className="mb-4 flex items-center">
+    <FileText className="h-5 w-5 text-blue-600 mr-2" />
+    <h3 className="text-lg font-medium text-blue-700">What We're Bidding <span className="text-sm font-normal text-gray-500">(20 minutes)</span></h3>
+  </div>
+  <FormField
+    label=""
+    name="biddingDeals"
+    value={formData.biddingDeals}
+    onChange={handleInputChange}
+    placeholder="Current bid status and updates"
+    isTextArea
+  />
+</div>
                           
                           <div className="bg-gradient-to-br from-red-50 to-white rounded-xl p-6 border border-red-100 shadow-sm hover:shadow-md transition-shadow">
-                            <div className="mb-4 flex items-center">
-                              <div className="h-2 w-2 bg-red-600 rounded-full mr-2"></div>
-                              <h3 className="text-lg font-medium text-red-700">Terminations/Ownership Changes</h3>
-                            </div>
-                            <FormField
-                              label=""
-                              name="terminationChanges"
-                              value={formData.terminationChanges || ''}
-                              onChange={handleInputChange}
-                              placeholder="Account terminations or ownership changes to monitor"
-                              isTextArea
-                            />
-                          </div>
+  <div className="mb-4 flex items-center">
+    <FileX className="h-5 w-5 text-red-600 mr-2" />
+    <h3 className="text-lg font-medium text-red-700">Terminations/Ownership Changes</h3>
+  </div>
+  <FormField
+    label=""
+    name="terminationChanges"
+    value={formData.terminationChanges || ''}
+    onChange={handleInputChange}
+    placeholder="Account terminations or ownership changes to monitor"
+    isTextArea
+  />
+</div>
                         </div>
                       </div>
                     </div>

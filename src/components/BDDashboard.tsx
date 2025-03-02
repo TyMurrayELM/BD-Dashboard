@@ -31,7 +31,7 @@ import {
   TrendingUp, // for header
 } from 'lucide-react';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, isSameDay } from 'date-fns';
+import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, isSameDay, addDays } from 'date-fns';
 
 // Data Types and Interfaces
 interface FormData {
@@ -793,12 +793,32 @@ const BDDashboard = () => {
       
       setWeekOptions(options);
       
-      // Set default selected week to current week if it's in range, otherwise first week
+      // Find the appropriate week based on today's date
       const todayWeekStart = startOfWeek(today, { weekStartsOn: 1 });
-      if (todayWeekStart >= startDate && todayWeekStart <= endDate) {
-        setSelectedWeek(format(todayWeekStart, 'yyyy-MM-dd'));
-      } else {
+      
+      if (today < startDate) {
+        // If today is before the available range, select the first week
         setSelectedWeek(format(startDate, 'yyyy-MM-dd'));
+      } else if (today > endDate) {
+        // If today is after the available range, select the last week
+        setSelectedWeek(options[options.length - 1].value);
+      } else {
+        // Find the current or next available week
+        const currentOrNextWeek = options.find(option => {
+          const optionDate = new Date(option.value);
+          // Is today within this week or is this the first week after today?
+          return (
+            (today >= optionDate && today <= addDays(optionDate, 6)) || 
+            (today < optionDate)
+          );
+        });
+        
+        if (currentOrNextWeek) {
+          setSelectedWeek(currentOrNextWeek.value);
+        } else {
+          // Fallback to the first week if no match found
+          setSelectedWeek(options[0].value);
+        }
       }
     };
     

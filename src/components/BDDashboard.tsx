@@ -640,6 +640,7 @@ const BDDashboard = () => {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [tabErrors, setTabErrors] = useState<TabErrors>({});
   const [isFormModified, setIsFormModified] = useState<boolean>(false);
+  const [isTargetListModified, setIsTargetListModified] = useState<boolean>(false);
   
   // Tab and week selection state
   const [activeTab, setActiveTab] = useState<string>("level10");
@@ -815,48 +816,52 @@ const BDDashboard = () => {
   // Data Fetching
   // ========================
   
-  // Main fetch function that handles all data fetching based on active tab
-  const fetchData = useCallback(async () => {
-    if (!supabase || connectionError) return;
-    
-    console.log(`Fetching data for tab: ${activeTab}`);
-    setIsLoading(true);
-    
-    try {
-      if (activeTab === "level10") {
-        await fetchMeetingForWeek(selectedWeek);
-      } else if (activeTab === "vto") {
-        // Fetch VTO data
-        console.log('Fetching VTO data...');
-        await fetchYearlyGoals();
-        await fetchIssuesList();
-        await fetchQuarterlyRocks();
-      } else if (activeTab === "presentations") {
-        // Fetch presentations data
-        console.log('Fetching presentations data...');
-        await fetchPresentationsData();
-      } else if (activeTab === "memberships") {
-        // Fetch memberships data
-        console.log('Fetching memberships data...');
-        await fetchMembershipsData();
-      } else if (activeTab === "targetList") {
-        // Fetch target list data
+// Main fetch function that handles all data fetching based on active tab
+const fetchData = useCallback(async () => {
+  if (!supabase || connectionError) return;
+  
+  console.log(`Fetching data for tab: ${activeTab}`);
+  setIsLoading(true);
+  
+  try {
+    if (activeTab === "level10") {
+      await fetchMeetingForWeek(selectedWeek);
+    } else if (activeTab === "vto") {
+      // Fetch VTO data
+      console.log('Fetching VTO data...');
+      await fetchYearlyGoals();
+      await fetchIssuesList();
+      await fetchQuarterlyRocks();
+    } else if (activeTab === "presentations") {
+      // Fetch presentations data
+      console.log('Fetching presentations data...');
+      await fetchPresentationsData();
+    } else if (activeTab === "memberships") {
+      // Fetch memberships data
+      console.log('Fetching memberships data...');
+      await fetchMembershipsData();
+    } else if (activeTab === "targetList") {
+      // Only fetch target list data if there are no unsaved changes
+      if (!isTargetListModified) {
         console.log('Fetching target list data...');
         await fetchTargetsData();
+      } else {
+        console.log('Using current Target List data (unsaved changes exist)');
       }
-    } catch (error: any) {
-      console.error(`Error fetching data for ${activeTab}:`, error);
-      setTabErrors((prev: TabErrors) => ({
-        ...prev,
-        [activeTab]: {
-          message: `Failed to fetch ${activeTab} data`,
-          details: error
-        }
-      }));
-    } finally {
-      setIsLoading(false);
     }
-  }, [activeTab, selectedWeek, supabase, connectionError]);
+  } catch (error: any) {
+    console.error(`Error fetching data for ${activeTab}:`, error);
+    setTabErrors((prev: TabErrors) => ({
+      ...prev,
+      [activeTab]: {
+        message: `Failed to fetch ${activeTab} data`,
+        details: error
+      }
+    }));
+  } finally {
+    setIsLoading(false);
+  }
+}, [activeTab, selectedWeek, supabase, connectionError, isTargetListModified]);
 // Fetch Level 10 Meeting data for the selected week
   const fetchMeetingForWeek = useCallback(async (weekStartDate: string) => {
     if (!supabase) return;
@@ -1293,36 +1298,44 @@ const BDDashboard = () => {
   // ========================
   
   // Handle tab change
-  const handleTabChange = (value: string) => {
-    if (value !== activeTab) {
-      // If leaving the VTO tab, save any changes to metrics
-      if (activeTab === "vto") {
-        saveYearlyGoals();
-      }
-      
-      // Cache form data before changing tabs
-      if (activeTab === "level10" && isFormModified) {
-        const cacheKey = `level10_${selectedWeek}`;
-        console.log('Saving form data to cache before tab change:', cacheKey, formData);
-        setCachedFormData((prev: CachedFormData) => ({
-          ...prev,
-          [cacheKey]: {
-            formData: { ...formData },
-            selectedDate,
-            currentMeetingId
-          }
-        }));
-        setIsFormModified(false);
-      }
-      
-      // Track visited tabs
-      if (!visitedTabs.includes(value)) {
-        setVisitedTabs((prev: string[]) => [...prev, value]);
-      }
-      
-      setActiveTab(value);
+// Handle tab change
+const handleTabChange = (value: string) => {
+  if (value !== activeTab) {
+    // If leaving the VTO tab, save any changes to metrics
+    if (activeTab === "vto") {
+      saveYearlyGoals();
     }
-  };
+    
+    // If leaving the Target List tab, save any changes
+    if (activeTab === "targetList" && isTargetListModified) {
+      console.log('Saving Target List data before tab change');
+      saveData();
+      setIsTargetListModified(false);
+    }
+    
+    // Cache form data before changing tabs
+    if (activeTab === "level10" && isFormModified) {
+      const cacheKey = `level10_${selectedWeek}`;
+      console.log('Saving form data to cache before tab change:', cacheKey, formData);
+      setCachedFormData((prev: CachedFormData) => ({
+        ...prev,
+        [cacheKey]: {
+          formData: { ...formData },
+          selectedDate,
+          currentMeetingId
+        }
+      }));
+      setIsFormModified(false);
+    }
+    
+    // Track visited tabs
+    if (!visitedTabs.includes(value)) {
+      setVisitedTabs((prev: string[]) => [...prev, value]);
+    }
+    
+    setActiveTab(value);
+  }
+};
 
   // Handle week selection change
   const handleWeekChange = (value: string) => {
@@ -1724,401 +1737,486 @@ const handleCurrentRevenueChange = (e: React.ChangeEvent<HTMLInputElement>, regi
   // Save Functions
   // ========================
   
-  // Main save function
-  const saveData = async () => {
-    if (!supabase) {
-      setConnectionError('Supabase client is not initialized. Cannot save data.');
-      return;
-    }
+// Main save function
+const saveData = async () => {
+  if (!supabase) {
+    setConnectionError('Supabase client is not initialized. Cannot save data.');
+    return;
+  }
+  
+  setIsSaving(true);
+  setSaveStatus('saving');
+  
+  try {
+    console.log(`Saving data for ${activeTab} tab for week: ${selectedWeek}`);
     
-    setIsSaving(true);
-    setSaveStatus('saving');
-    
-    try {
-      console.log(`Saving data for ${activeTab} tab for week: ${selectedWeek}`);
+    if (activeTab === "level10") {
+      // Save Level 10 meeting data
+      const meetingData = {
+        meeting_date: selectedDate?.toISOString(),
+        week_start_date: selectedWeek,
+        attendees: formData.attendees,
+        safety_message: formData.safetyMessage,
+        encore_values: formData.encoreValues,
+        closing_deals: formData.closingDeals,
+        bidding_deals: formData.biddingDeals,
+        hot_properties: formData.hotProperties || '',
+        termination_changes: formData.terminationChanges || '',
+        updated_at: new Date().toISOString()
+      };
       
-      if (activeTab === "level10") {
-        // Save Level 10 meeting data
-        const meetingData = {
-          meeting_date: selectedDate?.toISOString(),
+      console.log('Saving Level 10 meeting data:', meetingData);
+      // Define explicit type for the result variable and initialize as null
+      let result: { data: any[] | null; error: any } | null = null;
+      
+      if (currentMeetingId) {
+        console.log('Updating existing meeting with ID:', currentMeetingId);
+        result = await supabase
+          .from('level10_meetings')
+          .update(meetingData)
+          .eq('id', currentMeetingId)
+          .select();
+      } else {
+        console.log('Creating new meeting for week:', selectedWeek);
+        result = await supabase
+          .from('level10_meetings')
+          .insert(meetingData)
+          .select();
+      }
+      
+      if (!result) {
+        throw new Error('No result received from database operation');
+      }
+      
+      const { data, error } = result;
+      if (error) {
+        console.error('Error saving Level 10 meeting to Supabase:', error);
+        throw error;
+      }
+      
+      console.log('Level 10 meeting save successful, response:', data);
+      if (data && data.length > 0) {
+        console.log('Save successful - using current form values to prevent mismatch');
+        setCurrentMeetingId(data[0].id);
+        const saveTime = new Date().getTime();
+        window.localStorage.setItem('lastSaveTime', saveTime.toString());
+        
+        const cacheKey = `level10_${selectedWeek}`;
+        setCachedFormData((prev: CachedFormData) => ({
+          ...prev,
+          [cacheKey]: {
+            formData: { ...formData },
+            selectedDate,
+            currentMeetingId: data[0].id
+          }
+        }));
+        
+        setIsFormModified(false);
+      }
+    } else if (activeTab === "vto") {
+      try {
+        // Save yearly goals for all regions
+        for (const regionKey of Object.keys(yearlyGoals)) {
+          const region = yearlyGoals[regionKey];
+          
+          const yearlyGoalsData = {
+            year: region.year,
+            region: region.region,
+            revenue_target: parseFloat(region.revenueTarget) * 1000000,
+            revenue_description: region.revenueDescription,
+            retention_goal: parseFloat(region.retentionGoal),
+            retention_description: region.retentionDescription,
+            current_revenue: parseFloat(region.currentRevenue) * 1000000,
+            current_retention: parseFloat(region.currentRetention),
+            updated_at: new Date().toISOString()
+          };
+          
+          console.log(`Saving yearly goals data for ${region.region}:`, yearlyGoalsData);
+          let yearlyGoalsResult;
+          
+          if (region.id) {
+            yearlyGoalsResult = await supabase
+              .from('yearly_goals')
+              .update(yearlyGoalsData)
+              .eq('id', region.id)
+              .select();
+          } else {
+            yearlyGoalsResult = await supabase
+              .from('yearly_goals')
+              .insert(yearlyGoalsData)
+              .select();
+          }
+          
+          if (yearlyGoalsResult.error) {
+            console.error(`Error saving yearly goals for ${region.region}:`, yearlyGoalsResult.error);
+            throw yearlyGoalsResult.error;
+          }
+          
+          if (yearlyGoalsResult.data && yearlyGoalsResult.data.length > 0) {
+            setYearlyGoals((prev) => ({
+              ...prev,
+              [region.region]: { 
+                ...prev[region.region], 
+                id: yearlyGoalsResult.data[0].id 
+              }
+            }));
+          }
+        }
+        
+        // Save issues list
+        console.log('Saving issues list data:', issuesList);
+        for (const issue of issuesList) {
+          const issueData = {
+            issue_text: issue.issueText,
+            is_completed: issue.isCompleted,
+            assigned_to: issue.assignedTo,
+            due_date: issue.dueDate?.toISOString().split('T')[0],
+            week_start_date: selectedWeek,
+            updated_at: new Date().toISOString()
+          };
+          
+          if (issue.id) {
+            const { error } = await supabase
+              .from('issues_list')
+              .update(issueData)
+              .eq('id', issue.id);
+              
+            if (error) {
+              console.error('Error updating issue:', error);
+              throw error;
+            }
+          } else {
+            const { data, error } = await supabase
+              .from('issues_list')
+              .insert(issueData)
+              .select();
+              
+            if (error) {
+              console.error('Error inserting issue:', error);
+              throw error;
+            }
+            
+            if (data && data.length > 0) {
+              setIssuesList((prev: Issue[]) => 
+                prev.map((i: Issue) => 
+                  i.issueText === issue.issueText && i.id === null
+                    ? { ...i, id: data[0].id }
+                    : i
+                )
+              );
+            }
+          }
+        }
+        
+        // Save CRE Groups rock
+        const creGroupsData = {
+          title: quarterlyRocks.creGroups.title,  // Now editable
+          category: 'CRE Groups',
+          assigned_to: quarterlyRocks.creGroups.assignedTo,  // Now editable
+          current_groups: quarterlyRocks.creGroups.currentGroups,
+          action_items: quarterlyRocks.creGroups.actionItems,
           week_start_date: selectedWeek,
-          attendees: formData.attendees,
-          safety_message: formData.safetyMessage,
-          encore_values: formData.encoreValues,
-          closing_deals: formData.closingDeals,
-          bidding_deals: formData.biddingDeals,
-          hot_properties: formData.hotProperties || '',
-          termination_changes: formData.terminationChanges || '',
           updated_at: new Date().toISOString()
         };
         
-        console.log('Saving Level 10 meeting data:', meetingData);
-        // Define explicit type for the result variable and initialize as null
-        let result: { data: any[] | null; error: any } | null = null;
-        
-        if (currentMeetingId) {
-          console.log('Updating existing meeting with ID:', currentMeetingId);
-          result = await supabase
-            .from('level10_meetings')
-            .update(meetingData)
-            .eq('id', currentMeetingId)
-            .select();
+        console.log('Saving CRE Groups data:', creGroupsData);
+        if (quarterlyRocks.creGroups.id) {
+          const { error } = await supabase
+            .from('quarterly_rocks')
+            .update(creGroupsData)
+            .eq('id', quarterlyRocks.creGroups.id);
+            
+          if (error) {
+            console.error('Error updating CRE Groups:', error);
+            throw error;
+          }
         } else {
-          console.log('Creating new meeting for week:', selectedWeek);
-          result = await supabase
-            .from('level10_meetings')
-            .insert(meetingData)
+          const { data, error } = await supabase
+            .from('quarterly_rocks')
+            .insert(creGroupsData)
             .select();
-        }
-        
-        if (!result) {
-          throw new Error('No result received from database operation');
-        }
-        
-        const { data, error } = result;
-        if (error) {
-          console.error('Error saving Level 10 meeting to Supabase:', error);
-          throw error;
-        }
-        
-        console.log('Level 10 meeting save successful, response:', data);
-        if (data && data.length > 0) {
-          console.log('Save successful - using current form values to prevent mismatch');
-          setCurrentMeetingId(data[0].id);
-          const saveTime = new Date().getTime();
-          window.localStorage.setItem('lastSaveTime', saveTime.toString());
+            
+          if (error) {
+            console.error('Error inserting CRE Groups:', error);
+            throw error;
+          }
           
-          const cacheKey = `level10_${selectedWeek}`;
-          setCachedFormData((prev: CachedFormData) => ({
-            ...prev,
-            [cacheKey]: {
-              formData: { ...formData },
-              selectedDate,
-              currentMeetingId: data[0].id
+          if (data && data.length > 0) {
+            setQuarterlyRocks((prev: QuarterlyRocks) => ({
+              ...prev,
+              creGroups: { ...prev.creGroups, id: data[0].id }
+            }));
+          }
+        }
+        
+        // Save Production Rates rock
+        const productionRatesData = {
+          title: quarterlyRocks.productionRates.title,  // Now editable
+          category: 'Production',
+          assigned_to: quarterlyRocks.productionRates.assignedTo,  // Now editable
+          current_status: quarterlyRocks.productionRates.currentStatus,
+          updates_notes: quarterlyRocks.productionRates.updatesNotes,
+          week_start_date: selectedWeek,
+          updated_at: new Date().toISOString()
+        };
+        
+        console.log('Saving Production Rates data:', productionRatesData);
+        if (quarterlyRocks.productionRates.id) {
+          const { error } = await supabase
+            .from('quarterly_rocks')
+            .update(productionRatesData)
+            .eq('id', quarterlyRocks.productionRates.id);
+            
+          if (error) {
+            console.error('Error updating Production Rates:', error);
+            throw error;
+          }
+        } else {
+          const { data, error } = await supabase
+            .from('quarterly_rocks')
+            .insert(productionRatesData)
+            .select();
+            
+          if (error) {
+            console.error('Error inserting Production Rates:', error);
+            throw error;
+          }
+          
+          if (data && data.length > 0) {
+            setQuarterlyRocks((prev: QuarterlyRocks) => ({
+              ...prev,
+              productionRates: { ...prev.productionRates, id: data[0].id }
+            }));
+          }
+        }
+        
+        // Parse Events data from text areas
+        const puttingWorld: {
+          name: string;
+          date: string;
+          location: string;
+          attendance: number;
+          budget_status: string;
+          activities: string[];
+        } = { 
+          name: "Putting World Event", 
+          date: "", 
+          location: "", 
+          attendance: 0, 
+          budget_status: "", 
+          activities: [] 
+        };
+        
+        const lvCharcuterie: {
+          name: string;
+          date: string;
+          location: string;
+          attendance: number;
+          budget_status: string;
+          activities: string[];
+        } = { 
+          name: "LV Charcuterie Event", 
+          date: "", 
+          location: "", 
+          attendance: 0, 
+          budget_status: "", 
+          activities: [] 
+        };
+        
+        const puttingWorldLines = quarterlyRocks.events.puttingWorldEvent.split('\n');
+        puttingWorldLines.forEach((line: string) => {
+          if (line.startsWith('Date:')) puttingWorld.date = line.replace('Date:', '').trim();
+          else if (line.startsWith('Location:')) puttingWorld.location = line.replace('Location:', '').trim();
+          else if (line.startsWith('Expected Attendance:')) puttingWorld.attendance = parseInt(line.replace('Expected Attendance:', '').trim()) || 0;
+          else if (line.startsWith('Budget Status:')) puttingWorld.budget_status = line.replace('Budget Status:', '').trim();
+          else if (line.startsWith('- ')) puttingWorld.activities.push(line.replace('- ', '').trim());
+        });
+        
+        const lvCharcuterieLines = quarterlyRocks.events.lvCharcuterieEvent.split('\n');
+        lvCharcuterieLines.forEach((line: string) => {
+          if (line.startsWith('Date:')) lvCharcuterie.date = line.replace('Date:', '').trim();
+          else if (line.startsWith('Location:')) lvCharcuterie.location = line.replace('Location:', '').trim();
+          else if (line.startsWith('Expected Attendance:')) lvCharcuterie.attendance = parseInt(line.replace('Expected Attendance:', '').trim()) || 0;
+          else if (line.startsWith('Budget Status:')) lvCharcuterie.budget_status = line.replace('Budget Status:', '').trim();
+          else if (line.startsWith('- ')) lvCharcuterie.activities.push(line.replace('- ', '').trim());
+        });
+        
+        // Save Events rock
+        const eventsData = {
+          title: quarterlyRocks.events.title,  // Now editable
+          category: 'Events',
+          assigned_to: quarterlyRocks.events.assignedTo,  // Now editable
+          event_details: JSON.stringify([puttingWorld, lvCharcuterie]),
+          week_start_date: selectedWeek,
+          updated_at: new Date().toISOString()
+        };
+        
+        console.log('Saving Events data:', eventsData);
+        if (quarterlyRocks.events.id) {
+          const { error } = await supabase
+            .from('quarterly_rocks')
+            .update(eventsData)
+            .eq('id', quarterlyRocks.events.id);
+            
+          if (error) {
+            console.error('Error updating Events:', error);
+            throw error;
+          }
+        } else {
+          const { data, error } = await supabase
+            .from('quarterly_rocks')
+            .insert(eventsData)
+            .select();
+            
+          if (error) {
+            console.error('Error inserting Events:', error);
+            throw error;
+          }
+          
+          if (data && data.length > 0) {
+            setQuarterlyRocks((prev: QuarterlyRocks) => ({
+              ...prev,
+              events: { ...prev.events, id: data[0].id }
+            }));
+          }
+        }
+      } catch (vtoError: any) {
+        console.error('Error saving VTO data:', vtoError);
+        throw vtoError;
+      }
+    } else if (activeTab === "presentations") {
+      // Presentations tab save logic here (omitted for brevity)
+    } else if (activeTab === "memberships") {
+      // Memberships tab save logic here (omitted for brevity)
+    } else if (activeTab === "targetList") {
+      // Actually implement target list saving logic
+      console.log('Saving Target List data...');
+      
+      try {
+        // Get all existing target IDs from the database
+        const { data: existingTargets, error: fetchError } = await supabase
+          .from('targets')
+          .select('id')
+          .eq('status', 'active');
+          
+        if (fetchError) throw fetchError;
+        
+        // Create sets of IDs for comparison
+        const existingIds = new Set(existingTargets?.map(t => t.id) || []);
+        const currentIds = new Set(
+          targets
+            .filter(t => !t.id.includes('-')) // Only consider targets with real database IDs
+            .map(t => t.id)
+        );
+        
+        // Find targets to mark as inactive (deleted)
+        const targetsToDeactivate = [...existingIds].filter(id => !currentIds.has(id));
+        
+        console.log('Found', targetsToDeactivate.length, 'targets to deactivate');
+        
+        // Mark deleted targets as inactive
+        if (targetsToDeactivate.length > 0) {
+          console.log('Marking targets as inactive:', targetsToDeactivate);
+          for (const id of targetsToDeactivate) {
+            const { error: deactivateError } = await supabase
+              .from('targets')
+              .update({ 
+                status: 'inactive',
+                updated_at: new Date().toISOString() 
+              })
+              .eq('id', id);
+              
+            if (deactivateError) {
+              console.error(`Error deactivating target ${id}:`, deactivateError);
+              throw deactivateError;
             }
+          }
+        }
+        
+        // Only handle new targets (with temp IDs) - don't touch existing ones
+        // This prevents duplication
+        const newTargets = targets.filter(t => t.id.includes('-'));
+        console.log('Found', newTargets.length, 'new targets to insert');
+        
+        // Insert new targets only
+        if (newTargets.length > 0) {
+          const targetsToInsert = newTargets.map(t => ({
+            company: t.company,
+            contact_name: t.contact_name,
+            contact_title: t.contact_title || '',
+            contact_email: t.contact_email || '',
+            properties: t.properties || '',
+            sales_rep: t.sales_rep || '',
+            sales_rep_name: t.sales_rep_name || '',
+            notes: t.notes || '',
+            projected_value: t.projected_value || '0',
+            status: 'active',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
           }));
           
-          setIsFormModified(false);
+          const { error: insertError } = await supabase
+            .from('targets')
+            .insert(targetsToInsert);
+            
+          if (insertError) {
+            console.error('Error inserting new targets:', insertError);
+            throw insertError;
+          }
         }
-      } else if (activeTab === "vto") {
-        try {
-          // Save yearly goals for all regions
-          for (const regionKey of Object.keys(yearlyGoals)) {
-            const region = yearlyGoals[regionKey];
-            
-            const yearlyGoalsData = {
-              year: region.year,
-              region: region.region,
-              revenue_target: parseFloat(region.revenueTarget) * 1000000,
-              revenue_description: region.revenueDescription,
-              retention_goal: parseFloat(region.retentionGoal),
-              retention_description: region.retentionDescription,
-              current_revenue: parseFloat(region.currentRevenue) * 1000000,
-              current_retention: parseFloat(region.currentRetention),
-              updated_at: new Date().toISOString()
-            };
-            
-            console.log(`Saving yearly goals data for ${region.region}:`, yearlyGoalsData);
-            let yearlyGoalsResult;
-            
-            if (region.id) {
-              yearlyGoalsResult = await supabase
-                .from('yearly_goals')
-                .update(yearlyGoalsData)
-                .eq('id', region.id)
-                .select();
-            } else {
-              yearlyGoalsResult = await supabase
-                .from('yearly_goals')
-                .insert(yearlyGoalsData)
-                .select();
-            }
-            
-            if (yearlyGoalsResult.error) {
-              console.error(`Error saving yearly goals for ${region.region}:`, yearlyGoalsResult.error);
-              throw yearlyGoalsResult.error;
-            }
-            
-            if (yearlyGoalsResult.data && yearlyGoalsResult.data.length > 0) {
-              setYearlyGoals((prev) => ({
-                ...prev,
-                [region.region]: { 
-                  ...prev[region.region], 
-                  id: yearlyGoalsResult.data[0].id 
-                }
-              }));
-            }
-          }
-          
-          // Save issues list
-          console.log('Saving issues list data:', issuesList);
-          for (const issue of issuesList) {
-            const issueData = {
-              issue_text: issue.issueText,
-              is_completed: issue.isCompleted,
-              assigned_to: issue.assignedTo,
-              due_date: issue.dueDate?.toISOString().split('T')[0],
-              week_start_date: selectedWeek,
-              updated_at: new Date().toISOString()
-            };
-            
-            if (issue.id) {
-              const { error } = await supabase
-                .from('issues_list')
-                .update(issueData)
-                .eq('id', issue.id);
-                
-              if (error) {
-                console.error('Error updating issue:', error);
-                throw error;
-              }
-            } else {
-              const { data, error } = await supabase
-                .from('issues_list')
-                .insert(issueData)
-                .select();
-                
-              if (error) {
-                console.error('Error inserting issue:', error);
-                throw error;
-              }
-              
-              if (data && data.length > 0) {
-                setIssuesList((prev: Issue[]) => 
-                  prev.map((i: Issue) => 
-                    i.issueText === issue.issueText && i.id === null
-                      ? { ...i, id: data[0].id }
-                      : i
-                  )
-                );
-              }
-            }
-          }
-          
-          // Save CRE Groups rock
-          const creGroupsData = {
-            title: quarterlyRocks.creGroups.title,  // Now editable
-            category: 'CRE Groups',
-            assigned_to: quarterlyRocks.creGroups.assignedTo,  // Now editable
-            current_groups: quarterlyRocks.creGroups.currentGroups,
-            action_items: quarterlyRocks.creGroups.actionItems,
-            week_start_date: selectedWeek,
-            updated_at: new Date().toISOString()
-          };
-          
-          console.log('Saving CRE Groups data:', creGroupsData);
-          if (quarterlyRocks.creGroups.id) {
-            const { error } = await supabase
-              .from('quarterly_rocks')
-              .update(creGroupsData)
-              .eq('id', quarterlyRocks.creGroups.id);
-              
-            if (error) {
-              console.error('Error updating CRE Groups:', error);
-              throw error;
-            }
-          } else {
-            const { data, error } = await supabase
-              .from('quarterly_rocks')
-              .insert(creGroupsData)
-              .select();
-              
-            if (error) {
-              console.error('Error inserting CRE Groups:', error);
-              throw error;
-            }
-            
-            if (data && data.length > 0) {
-              setQuarterlyRocks((prev: QuarterlyRocks) => ({
-                ...prev,
-                creGroups: { ...prev.creGroups, id: data[0].id }
-              }));
-            }
-          }
-          
-          // Save Production Rates rock
-          const productionRatesData = {
-            title: quarterlyRocks.productionRates.title,  // Now editable
-            category: 'Production',
-            assigned_to: quarterlyRocks.productionRates.assignedTo,  // Now editable
-            current_status: quarterlyRocks.productionRates.currentStatus,
-            updates_notes: quarterlyRocks.productionRates.updatesNotes,
-            week_start_date: selectedWeek,
-            updated_at: new Date().toISOString()
-          };
-          
-          console.log('Saving Production Rates data:', productionRatesData);
-          if (quarterlyRocks.productionRates.id) {
-            const { error } = await supabase
-              .from('quarterly_rocks')
-              .update(productionRatesData)
-              .eq('id', quarterlyRocks.productionRates.id);
-              
-            if (error) {
-              console.error('Error updating Production Rates:', error);
-              throw error;
-            }
-          } else {
-            const { data, error } = await supabase
-              .from('quarterly_rocks')
-              .insert(productionRatesData)
-              .select();
-              
-            if (error) {
-              console.error('Error inserting Production Rates:', error);
-              throw error;
-            }
-            
-            if (data && data.length > 0) {
-              setQuarterlyRocks((prev: QuarterlyRocks) => ({
-                ...prev,
-                productionRates: { ...prev.productionRates, id: data[0].id }
-              }));
-            }
-          }
-          
-          // Parse Events data from text areas
-          const puttingWorld: {
-            name: string;
-            date: string;
-            location: string;
-            attendance: number;
-            budget_status: string;
-            activities: string[];
-          } = { 
-            name: "Putting World Event", 
-            date: "", 
-            location: "", 
-            attendance: 0, 
-            budget_status: "", 
-            activities: [] 
-          };
-          
-          const lvCharcuterie: {
-            name: string;
-            date: string;
-            location: string;
-            attendance: number;
-            budget_status: string;
-            activities: string[];
-          } = { 
-            name: "LV Charcuterie Event", 
-            date: "", 
-            location: "", 
-            attendance: 0, 
-            budget_status: "", 
-            activities: [] 
-          };
-          
-          const puttingWorldLines = quarterlyRocks.events.puttingWorldEvent.split('\n');
-          puttingWorldLines.forEach((line: string) => {
-            if (line.startsWith('Date:')) puttingWorld.date = line.replace('Date:', '').trim();
-            else if (line.startsWith('Location:')) puttingWorld.location = line.replace('Location:', '').trim();
-            else if (line.startsWith('Expected Attendance:')) puttingWorld.attendance = parseInt(line.replace('Expected Attendance:', '').trim()) || 0;
-            else if (line.startsWith('Budget Status:')) puttingWorld.budget_status = line.replace('Budget Status:', '').trim();
-            else if (line.startsWith('- ')) puttingWorld.activities.push(line.replace('- ', '').trim());
-          });
-          
-          const lvCharcuterieLines = quarterlyRocks.events.lvCharcuterieEvent.split('\n');
-          lvCharcuterieLines.forEach((line: string) => {
-            if (line.startsWith('Date:')) lvCharcuterie.date = line.replace('Date:', '').trim();
-            else if (line.startsWith('Location:')) lvCharcuterie.location = line.replace('Location:', '').trim();
-            else if (line.startsWith('Expected Attendance:')) lvCharcuterie.attendance = parseInt(line.replace('Expected Attendance:', '').trim()) || 0;
-            else if (line.startsWith('Budget Status:')) lvCharcuterie.budget_status = line.replace('Budget Status:', '').trim();
-            else if (line.startsWith('- ')) lvCharcuterie.activities.push(line.replace('- ', '').trim());
-          });
-          
-          // Save Events rock
-          const eventsData = {
-            title: quarterlyRocks.events.title,  // Now editable
-            category: 'Events',
-            assigned_to: quarterlyRocks.events.assignedTo,  // Now editable
-            event_details: JSON.stringify([puttingWorld, lvCharcuterie]),
-            week_start_date: selectedWeek,
-            updated_at: new Date().toISOString()
-          };
-          
-          console.log('Saving Events data:', eventsData);
-          if (quarterlyRocks.events.id) {
-            const { error } = await supabase
-              .from('quarterly_rocks')
-              .update(eventsData)
-              .eq('id', quarterlyRocks.events.id);
-              
-            if (error) {
-              console.error('Error updating Events:', error);
-              throw error;
-            }
-          } else {
-            const { data, error } = await supabase
-              .from('quarterly_rocks')
-              .insert(eventsData)
-              .select();
-              
-            if (error) {
-              console.error('Error inserting Events:', error);
-              throw error;
-            }
-            
-            if (data && data.length > 0) {
-              setQuarterlyRocks((prev: QuarterlyRocks) => ({
-                ...prev,
-                events: { ...prev.events, id: data[0].id }
-              }));
-            }
-          }
-        } catch (vtoError: any) {
-          console.error('Error saving VTO data:', vtoError);
-          throw vtoError;
-        }
-      } else if (activeTab === "presentations") {
-        // Presentations tab save logic here (omitted for brevity)
-      } else if (activeTab === "memberships") {
-        // Memberships tab save logic here (omitted for brevity)
-      } else if (activeTab === "targetList") {
-        // Target list tab save logic here (omitted for brevity)
+        
+        // Reset the modified flag after successful save
+        setIsTargetListModified(false);
+        
+        // After saving, force a fresh fetch of target data to get DB-assigned IDs
+        await fetchTargetsData();
+        
+      } catch (targetError: any) {
+        console.error('Error saving Target List data:', targetError);
+        throw targetError;
       }
-      
-      console.log(`Successfully saved ${activeTab} data`);
-      setSaveStatus('success');
-      setTimeout(() => setSaveStatus('idle'), 3000);
-    } catch (error: any) {
-      console.error('Error saving data:', error);
-      
-      // Extract more detailed error information
-      let errorDetails = '';
-      if (error) {
-        if (error.message) {
-          errorDetails = error.message;
-        } else if (error.details) {
-          errorDetails = typeof error.details === 'string' ? error.details : JSON.stringify(error.details);
-        } else if (error.code) {
-          errorDetails = `Error code: ${error.code}`;
-        } else if (typeof error === 'object') {
-          errorDetails = JSON.stringify(error);
-        } else {
-          errorDetails = String(error);
-        }
-      }
-      
-      // If we've got an empty object as a string, provide more context
-      if (errorDetails === '{}') {
-        errorDetails = 'Empty error object returned from Supabase. Check your database permissions and schema.';
-      }
-      
-      setSaveStatus('error');
-      setTabErrors((prev: TabErrors) => ({
-        ...prev,
-        [activeTab]: {
-          message: `Failed to save ${activeTab} data: ${errorDetails}`,
-          details: error
-        }
-      }));
-      setTimeout(() => setSaveStatus('idle'), 3000);
-    } finally {
-      setIsSaving(false);
     }
-  };
+    
+    console.log(`Successfully saved ${activeTab} data`);
+    setSaveStatus('success');
+    setTimeout(() => setSaveStatus('idle'), 3000);
+  } catch (error: any) {
+    console.error('Error saving data:', error);
+    
+    // Extract more detailed error information
+    let errorDetails = '';
+    if (error) {
+      if (error.message) {
+        errorDetails = error.message;
+      } else if (error.details) {
+        errorDetails = typeof error.details === 'string' ? error.details : JSON.stringify(error.details);
+      } else if (error.code) {
+        errorDetails = `Error code: ${error.code}`;
+      } else if (typeof error === 'object') {
+        errorDetails = JSON.stringify(error);
+      } else {
+        errorDetails = String(error);
+      }
+    }
+    
+    // If we've got an empty object as a string, provide more context
+    if (errorDetails === '{}') {
+      errorDetails = 'Empty error object returned from Supabase. Check your database permissions and schema.';
+    }
+    
+    setSaveStatus('error');
+    setTabErrors((prev: TabErrors) => ({
+      ...prev,
+      [activeTab]: {
+        message: `Failed to save ${activeTab} data: ${errorDetails}`,
+        details: error
+      }
+    }));
+    setTimeout(() => setSaveStatus('idle'), 3000);
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   // Save yearly goals separately - Updated for regions
   const saveYearlyGoals = async (region?: string, currentRevenueStr?: string, currentRetentionStr?: string) => {
@@ -2210,6 +2308,8 @@ const handleCurrentRevenueChange = (e: React.ChangeEvent<HTMLInputElement>, regi
     }
   };
 
+
+
 // Save target (for immediate updates to the targets list)
 const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
   try {
@@ -2223,6 +2323,9 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
     // First, apply the update to the local state
     const updatedTargets = updateFn([...targets]);
     setTargets(updatedTargets);
+    
+    // Mark the target list as modified
+    setIsTargetListModified(true);
     
     // Find what changed (new, updated, or deleted targets)
     const originalIds = new Set(targets.map(t => t.id));
@@ -2250,6 +2353,11 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
          origT.projected_value !== t.projected_value)
       )
     );
+    
+    // Log what's happening for debugging
+    console.log('Targets to add:', targetsToAdd.length);
+    console.log('Targets to update:', targetsToUpdate.length);
+    console.log('Targets to remove:', targetsToRemove.length);
     
     // Process each type of change
     
@@ -2307,6 +2415,7 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
     for (const target of targetsToRemove) {
       // Only delete if it's a real database record (not a temporary one)
       if (!target.id.includes('-')) {
+        console.log(`Marking target as inactive: ${target.id}`);
         const { error: deleteError } = await supabase
           .from('targets')
           .update({
@@ -2319,6 +2428,8 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
           console.error(`Error removing target ${target.id}:`, deleteError);
           throw deleteError;
         }
+      } else {
+        console.log(`Skipping temporary target deletion: ${target.id}`);
       }
     }
     
@@ -2337,8 +2448,8 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
       }
     }));
     
-    // Roll back to previous state if there was an error
-    fetchTargetsData();
+    // Don't automatically fetch data on error as it might overwrite unsaved changes
+    // Instead, we'll keep the current state and let the user try again
     
     setTimeout(() => setSaveStatus('idle'), 2000);
   }

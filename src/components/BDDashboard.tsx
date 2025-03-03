@@ -710,7 +710,7 @@ const BDDashboard = () => {
   const [cachedFormData, setCachedFormData] = useState<CachedFormData>({});
   const [currentMeetingId, setCurrentMeetingId] = useState<string | null>(null);
   const lastFetchedRef = useRef<{[key: string]: number}>({});
-  const revenueInputRefs = useRef({});
+  const revenueInputRefs = useRef<{[region: string]: {[index: number]: HTMLInputElement}}>({});
   
 // 3. Add these state variables inside your BDDashboard component for Revenue Details
 const [showRevenueDetails, setShowRevenueDetails] = useState<boolean>(false);
@@ -3111,7 +3111,6 @@ const RevenueDetailsModal = () => {
       </td>
       <td className="py-2 px-3 text-sm text-right">
   {property.isEditing ? (
-    // Use a basic HTML input for simplicity
     <input
       type="text"
       data-property-index={index}

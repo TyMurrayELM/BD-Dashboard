@@ -1595,7 +1595,7 @@ const handlePropertyEdit = (index: number) => {
 };
 
 // Update the handlePropertySave function to add console logging
-const handlePropertySave = async (index) => {
+const handlePropertySave = async (index: number) => {
   if (!supabase || !activeRegionDetails || !currentMeetingId) return;
   
   try {

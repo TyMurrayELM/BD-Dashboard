@@ -719,18 +719,18 @@ const [activeRegionDetails, setActiveRegionDetails] = useState<'Las Vegas' | 'Ph
 // Property revenues data (sample data for the modal)
 const [propertyRevenues, setPropertyRevenues] = useState<PropertyRevenueData>({
   'Las Vegas': [
-    { name: 'Downtown Office Plaza', revenue: 125000 },
-    { name: 'Summerlin Business Park', revenue: 82500 },
-    { name: 'Henderson Medical Center', revenue: 67000 },
-    { name: 'Spring Valley Shopping Center', revenue: 45000 },
-    { name: 'Warm Springs Corporate Park', revenue: 93000 }
+    { id: null, name: 'Downtown Office Plaza', revenue: 125000 },
+    { id: null, name: 'Summerlin Business Park', revenue: 82500 },
+    { id: null, name: 'Henderson Medical Center', revenue: 67000 },
+    { id: null, name: 'Spring Valley Shopping Center', revenue: 45000 },
+    { id: null, name: 'Warm Springs Corporate Park', revenue: 93000 }
   ],
   'Phoenix': [
-    { name: 'Camelback Corporate Center', revenue: 105000 },
-    { name: 'Scottsdale Office Tower', revenue: 78000 },
-    { name: 'Tempe Technology Park', revenue: 113000 },
-    { name: 'Glendale Shopping Mall', revenue: 59000 },
-    { name: 'Mesa Medical Complex', revenue: 69500 }
+    { id: null, name: 'Camelback Corporate Center', revenue: 105000 },
+    { id: null, name: 'Scottsdale Office Tower', revenue: 78000 },
+    { id: null, name: 'Tempe Technology Park', revenue: 113000 },
+    { id: null, name: 'Glendale Shopping Mall', revenue: 59000 },
+    { id: null, name: 'Mesa Medical Complex', revenue: 69500 }
   ]
 });
 

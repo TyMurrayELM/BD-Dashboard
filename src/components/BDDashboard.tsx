@@ -34,6 +34,25 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import CalendarEventsView from './CalendarEventsView';
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, isSameDay, addDays } from 'date-fns';
 
+// Format number with commas (e.g., 1000 → 1,000)
+const formatNumberWithCommas = (value: string): string => {
+  // Remove any non-numeric characters except decimal point
+  const numValue = value.replace(/[^0-9.]/g, '');
+  
+  // If it's not a valid number, return as is
+  if (isNaN(parseFloat(numValue))) return value;
+  
+  // Split by decimal point
+  const parts = numValue.split('.');
+  
+  // Format the integer part with commas
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  
+  // Join back with decimal part if it exists
+  return parts.join('.');
+};
+
+
 // Data Types and Interfaces
 interface FormData {
   attendees: string;
@@ -45,6 +64,10 @@ interface FormData {
   terminationChanges: string;
   associationUpdate: string;
   associationEvents: AssociationEvent[];
+  lvMonthlyRevenueActual: string;
+  lvMonthlyRevenueGoal: string;
+  phxMonthlyRevenueActual: string;
+  phxMonthlyRevenueGoal: string;
 }
 
 // Add this new interface underneath
@@ -676,7 +699,11 @@ const [formData, setFormData] = useState<FormData>({
   hotProperties: '',
   terminationChanges: '',
   associationUpdate: '',
-  associationEvents: []
+  associationEvents: [],
+  lvMonthlyRevenueActual: '0',
+  lvMonthlyRevenueGoal: '0',
+  phxMonthlyRevenueActual: '0',
+  phxMonthlyRevenueGoal: '0'
 });
 
   // Vision Traction Organizer data - Updated for regions
@@ -952,7 +979,11 @@ const fetchMeetingForWeek = useCallback(async (weekStartDate: string) => {
         terminationChanges: data[0].termination_changes || '',
         // New fields
         associationUpdate: data[0].association_update || '',
-        associationEvents: [] // Will be populated below
+        associationEvents: [],
+        lvMonthlyRevenueActual: data[0].lv_monthly_revenue_actual?.toString() || '0',
+      lvMonthlyRevenueGoal: data[0].lv_monthly_revenue_goal?.toString() || '0',
+      phxMonthlyRevenueActual: data[0].phx_monthly_revenue_actual?.toString() || '0',
+      phxMonthlyRevenueGoal: data[0].phx_monthly_revenue_goal?.toString() || '0' // Will be populated below
       };
       
       // Fetch associated events for this meeting
@@ -1003,7 +1034,12 @@ const fetchMeetingForWeek = useCallback(async (weekStartDate: string) => {
         terminationChanges: '',
         // New fields with empty values
         associationUpdate: '',
-        associationEvents: []
+        associationEvents: [],
+        lvMonthlyRevenueActual: '0',
+      lvMonthlyRevenueGoal: '0',
+      phxMonthlyRevenueActual: '0',
+      phxMonthlyRevenueGoal: '0'
+    
       };
       
       setFormData(resetFormData);
@@ -1822,6 +1858,10 @@ const saveData = async () => {
         hot_properties: formData.hotProperties || '',
         termination_changes: formData.terminationChanges || '',
         association_update: formData.associationUpdate || '', // Add this line
+        lv_monthly_revenue_actual: parseFloat(formData.lvMonthlyRevenueActual) || 0,
+        lv_monthly_revenue_goal: parseFloat(formData.lvMonthlyRevenueGoal) || 0,
+        phx_monthly_revenue_actual: parseFloat(formData.phxMonthlyRevenueActual) || 0,
+        phx_monthly_revenue_goal: parseFloat(formData.phxMonthlyRevenueGoal) || 0,
         updated_at: new Date().toISOString()
       };
       
@@ -2885,6 +2925,166 @@ const filteredTargets = targets.filter((target: Target) => {
     <Handshake className="h-5 w-5 text-green-600 mr-2" />
     <h3 className="text-lg font-medium text-green-700">What We're Closing <span className="text-sm font-normal text-gray-500">(10 minutes)</span></h3>
   </div>
+  
+  {/* Monthly Revenue Goals with Edit Capability */}
+  <div className="bg-white p-3 rounded-lg border border-green-100 mb-4">
+    <div className="flex justify-between items-center mb-2">
+      <div className="text-sm font-medium text-gray-600">Monthly Revenue Goals</div>
+      <div className="text-sm font-medium text-gray-600">
+        {selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+      </div>
+    </div>
+    
+    {/* Las Vegas Region */}
+    <div className="p-2 border-b border-gray-100">
+      <div className="flex items-center mb-2">
+        <img src="/icons/lv.png" alt="Las Vegas" className="h-5 w-5 mr-2" />
+        <span className="font-medium text-yellow-800">Las Vegas</span>
+        
+        {/* Calculate percentage */}
+        <span className="ml-auto text-xs text-gray-500">
+          {Math.min(100, Math.round((parseFloat(formData.lvMonthlyRevenueActual || '0') / 
+            (parseFloat(formData.lvMonthlyRevenueGoal || '1') || 1)) * 100))}% of goal
+        </span>
+      </div>
+      
+      {/* Progress bar */}
+      <div className="flex items-center">
+        <div className="w-full bg-gray-100 rounded-full h-2.5">
+          <div 
+            className={`${parseFloat(formData.lvMonthlyRevenueActual || '0') >= parseFloat(formData.lvMonthlyRevenueGoal || '0') 
+              ? 'bg-green-600' : 'bg-yellow-500'} h-2.5 rounded-full`}
+            style={{ 
+              width: `${Math.min(100, Math.round((parseFloat(formData.lvMonthlyRevenueActual || '0') / 
+                (parseFloat(formData.lvMonthlyRevenueGoal || '1') || 1)) * 100))}%` 
+            }} 
+          ></div>
+        </div>
+      </div>
+      
+      {/* Editable values */}
+      <div className="mt-2 flex justify-between text-sm">
+      <div>
+  <span className="mr-1 text-gray-500">$</span>
+  <input
+    type="text"
+    className="w-24 font-bold text-yellow-700 border-b border-dashed border-gray-300 focus:outline-none focus:border-yellow-500 bg-transparent"
+    value={formatNumberWithCommas(formData.lvMonthlyRevenueActual)}
+    onFocus={(e) => {
+      // Show raw value (without commas) when focused
+      e.target.value = formData.lvMonthlyRevenueActual;
+    }}
+    onBlur={(e) => {
+      // Format with commas when focus is lost
+      e.target.value = formatNumberWithCommas(formData.lvMonthlyRevenueActual);
+    }}
+    onChange={(e) => {
+      // Only allow numbers and decimals
+      const value = e.target.value.replace(/[^0-9.]/g, '');
+      setFormData(prev => ({...prev, lvMonthlyRevenueActual: value}));
+      setIsFormModified(true);
+    }}
+  />
+  <span className="ml-1 text-gray-500">Actual</span>
+</div>
+        <div className="text-right">
+          <span className="text-gray-500">Goal: $</span>
+          <input
+  type="text"
+  className="w-24 font-bold text-gray-700 border-b border-dashed border-gray-300 focus:outline-none focus:border-yellow-500 bg-transparent"
+  value={formatNumberWithCommas(formData.lvMonthlyRevenueGoal)}
+  onFocus={(e) => {
+    // Show raw value (without commas) when focused
+    e.target.value = formData.lvMonthlyRevenueGoal;
+  }}
+  onBlur={(e) => {
+    // Format with commas when focus is lost
+    e.target.value = formatNumberWithCommas(formData.lvMonthlyRevenueGoal);
+  }}
+  onChange={(e) => {
+    // Only allow numbers and decimals
+    const value = e.target.value.replace(/[^0-9.]/g, '');
+    setFormData(prev => ({...prev, lvMonthlyRevenueGoal: value}));
+    setIsFormModified(true);
+  }}
+/>
+        </div>
+      </div>
+    </div>
+    
+    {/* Phoenix Region */}
+    <div className="p-2 pt-3">
+      <div className="flex items-center mb-2">
+        <img src="/icons/az.png" alt="Phoenix" className="h-5 w-5 mr-2" />
+        <span className="font-medium text-orange-800">Phoenix</span>
+        
+        {/* Calculate percentage */}
+        <span className="ml-auto text-xs text-gray-500">
+          {Math.min(100, Math.round((parseFloat(formData.phxMonthlyRevenueActual || '0') / 
+            (parseFloat(formData.phxMonthlyRevenueGoal || '1') || 1)) * 100))}% of goal
+        </span>
+      </div>
+      
+      {/* Progress bar */}
+      <div className="flex items-center">
+        <div className="w-full bg-gray-100 rounded-full h-2.5">
+          <div 
+            className={`${parseFloat(formData.phxMonthlyRevenueActual || '0') >= parseFloat(formData.phxMonthlyRevenueGoal || '0') 
+              ? 'bg-green-600' : 'bg-orange-500'} h-2.5 rounded-full`}
+            style={{ 
+              width: `${Math.min(100, Math.round((parseFloat(formData.phxMonthlyRevenueActual || '0') / 
+                (parseFloat(formData.phxMonthlyRevenueGoal || '1') || 1)) * 100))}%` 
+            }} 
+          ></div>
+        </div>
+      </div>
+      
+      {/* Editable values */}
+      <div className="mt-2 flex justify-between text-sm">
+      <div>
+  <span className="mr-1 text-gray-500">$</span>
+  <input
+    type="text"
+    className="w-24 font-bold text-orange-700 border-b border-dashed border-gray-300 focus:outline-none focus:border-orange-500 bg-transparent"
+    value={formatNumberWithCommas(formData.phxMonthlyRevenueActual)}
+    onFocus={(e) => {
+      e.target.value = formData.phxMonthlyRevenueActual;
+    }}
+    onBlur={(e) => {
+      e.target.value = formatNumberWithCommas(formData.phxMonthlyRevenueActual);
+    }}
+    onChange={(e) => {
+      const value = e.target.value.replace(/[^0-9.]/g, '');
+      setFormData(prev => ({...prev, phxMonthlyRevenueActual: value}));
+      setIsFormModified(true);
+    }}
+  />
+  <span className="ml-1 text-gray-500">Actual</span>
+</div>
+
+<div className="text-right">
+  <span className="text-gray-500">Goal: $</span>
+  <input
+    type="text"
+    className="w-24 font-bold text-gray-700 border-b border-dashed border-gray-300 focus:outline-none focus:border-orange-500 bg-transparent"
+    value={formatNumberWithCommas(formData.phxMonthlyRevenueGoal)}
+    onFocus={(e) => {
+      e.target.value = formData.phxMonthlyRevenueGoal;
+    }}
+    onBlur={(e) => {
+      e.target.value = formatNumberWithCommas(formData.phxMonthlyRevenueGoal);
+    }}
+    onChange={(e) => {
+      const value = e.target.value.replace(/[^0-9.]/g, '');
+      setFormData(prev => ({...prev, phxMonthlyRevenueGoal: value}));
+      setIsFormModified(true);
+    }}
+  />
+</div>
+      </div>
+    </div>
+  </div>
+  
   <FormField
     label=""
     name="closingDeals"

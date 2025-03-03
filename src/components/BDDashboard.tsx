@@ -1616,11 +1616,11 @@ const handlePropertySave = async (index: number) => {
     } 
     // 2. Then try direct DOM query as fallback
     else {
-      const inputElement = document.querySelector(`[data-property-index="${index}"]`);
-      if (inputElement) {
-        inputValue = inputElement.value;
-        console.log('Got value from DOM:', inputValue);
-      }
+      const inputElement = document.querySelector(`[data-property-index="${index}"]`) as HTMLInputElement | null;
+if (inputElement) {
+  inputValue = inputElement.value;
+  console.log('Got value from DOM:', inputValue);
+}
       // 3. Finally use the state value if all else fails
       else {
         inputValue = property.tempRevenue || property.revenue.toString();

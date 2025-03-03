@@ -2918,230 +2918,227 @@ const filteredTargets = targets.filter((target: Target) => {
   />
 </div>
 
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div className="space-y-6">
-                        <div className="bg-gradient-to-br from-green-50 to-white rounded-xl p-6 border border-green-200 shadow-sm hover:shadow-md transition-shadow">
-  <div className="mb-4 flex items-center">
-    <Handshake className="h-5 w-5 text-green-600 mr-2" />
-    <h3 className="text-lg font-medium text-green-700">What We're Closing <span className="text-sm font-normal text-gray-500">(10 minutes)</span></h3>
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <div className="space-y-6 flex flex-col">
+    <div className="bg-gradient-to-br from-green-50 to-white rounded-xl p-6 border border-green-200 shadow-sm hover:shadow-md transition-shadow flex-grow">
+      <div className="mb-4 flex items-center">
+        <Handshake className="h-5 w-5 text-green-600 mr-2" />
+        <h3 className="text-lg font-medium text-green-700">What We're Closing <span className="text-sm font-normal text-gray-500">(10 minutes)</span></h3>
+      </div>
+      
+      {/* Monthly Revenue Goals with Edit Capability */}
+      <div className="bg-white p-3 rounded-lg border border-green-100 mb-4">
+        <div className="flex justify-between items-center mb-2">
+          <div className="text-sm font-medium text-gray-600">Monthly Revenue Goals</div>
+          <div className="text-sm font-medium text-gray-600">
+            {selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+          </div>
+        </div>
+        
+        {/* Las Vegas Region */}
+        <div className="p-2 border-b border-gray-100">
+          <div className="flex items-center mb-2">
+            <img src="/icons/lv.png" alt="Las Vegas" className="h-5 w-5 mr-2" />
+            <span className="font-medium text-yellow-800">Las Vegas</span>
+            
+            {/* Calculate percentage */}
+            <span className="ml-auto text-xs text-gray-500">
+              {Math.min(100, Math.round((parseFloat(formData.lvMonthlyRevenueActual || '0') / 
+                (parseFloat(formData.lvMonthlyRevenueGoal || '1') || 1)) * 100))}% of goal
+            </span>
+          </div>
+          
+          {/* Progress bar */}
+          <div className="flex items-center">
+            <div className="w-full bg-gray-100 rounded-full h-2.5">
+              <div 
+                className={`${parseFloat(formData.lvMonthlyRevenueActual || '0') >= parseFloat(formData.lvMonthlyRevenueGoal || '0') 
+                  ? 'bg-green-600' : 'bg-yellow-500'} h-2.5 rounded-full`}
+                style={{ 
+                  width: `${Math.min(100, Math.round((parseFloat(formData.lvMonthlyRevenueActual || '0') / 
+                    (parseFloat(formData.lvMonthlyRevenueGoal || '1') || 1)) * 100))}%` 
+                }} 
+              ></div>
+            </div>
+          </div>
+          
+          {/* Editable values */}
+          <div className="mt-2 flex justify-between text-sm">
+            <div>
+              <span className="mr-1 text-gray-500">$</span>
+              <input
+                type="text"
+                className="w-24 font-bold text-yellow-700 border-b border-dashed border-gray-300 focus:outline-none focus:border-yellow-500 bg-transparent"
+                value={formatNumberWithCommas(formData.lvMonthlyRevenueActual)}
+                onFocus={(e) => {
+                  // Show raw value (without commas) when focused
+                  e.target.value = formData.lvMonthlyRevenueActual;
+                }}
+                onBlur={(e) => {
+                  // Format with commas when focus is lost
+                  e.target.value = formatNumberWithCommas(formData.lvMonthlyRevenueActual);
+                }}
+                onChange={(e) => {
+                  // Only allow numbers and decimals
+                  const value = e.target.value.replace(/[^0-9.]/g, '');
+                  setFormData(prev => ({...prev, lvMonthlyRevenueActual: value}));
+                  setIsFormModified(true);
+                }}
+              />
+              <span className="ml-1 text-gray-500">Actual</span>
+            </div>
+            <div className="text-right">
+              <span className="text-gray-500">Goal: $</span>
+              <input
+                type="text"
+                className="w-24 font-bold text-gray-700 border-b border-dashed border-gray-300 focus:outline-none focus:border-yellow-500 bg-transparent"
+                value={formatNumberWithCommas(formData.lvMonthlyRevenueGoal)}
+                onFocus={(e) => {
+                  e.target.value = formData.lvMonthlyRevenueGoal;
+                }}
+                onBlur={(e) => {
+                  e.target.value = formatNumberWithCommas(formData.lvMonthlyRevenueGoal);
+                }}
+                onChange={(e) => {
+                  // Only allow numbers and decimals
+                  const value = e.target.value.replace(/[^0-9.]/g, '');
+                  setFormData(prev => ({...prev, lvMonthlyRevenueGoal: value}));
+                  setIsFormModified(true);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+        
+        {/* Phoenix Region */}
+        <div className="p-2 pt-3">
+          <div className="flex items-center mb-2">
+            <img src="/icons/az.png" alt="Phoenix" className="h-5 w-5 mr-2" />
+            <span className="font-medium text-orange-800">Phoenix</span>
+            
+            {/* Calculate percentage */}
+            <span className="ml-auto text-xs text-gray-500">
+              {Math.min(100, Math.round((parseFloat(formData.phxMonthlyRevenueActual || '0') / 
+                (parseFloat(formData.phxMonthlyRevenueGoal || '1') || 1)) * 100))}% of goal
+            </span>
+          </div>
+          
+          {/* Progress bar */}
+          <div className="flex items-center">
+            <div className="w-full bg-gray-100 rounded-full h-2.5">
+              <div 
+                className={`${parseFloat(formData.phxMonthlyRevenueActual || '0') >= parseFloat(formData.phxMonthlyRevenueGoal || '0') 
+                  ? 'bg-green-600' : 'bg-orange-500'} h-2.5 rounded-full`}
+                style={{ 
+                  width: `${Math.min(100, Math.round((parseFloat(formData.phxMonthlyRevenueActual || '0') / 
+                    (parseFloat(formData.phxMonthlyRevenueGoal || '1') || 1)) * 100))}%` 
+                }} 
+              ></div>
+            </div>
+          </div>
+          
+          {/* Editable values */}
+          <div className="mt-2 flex justify-between text-sm">
+            <div>
+              <span className="mr-1 text-gray-500">$</span>
+              <input
+                type="text"
+                className="w-24 font-bold text-orange-700 border-b border-dashed border-gray-300 focus:outline-none focus:border-orange-500 bg-transparent"
+                value={formatNumberWithCommas(formData.phxMonthlyRevenueActual)}
+                onFocus={(e) => {
+                  e.target.value = formData.phxMonthlyRevenueActual;
+                }}
+                onBlur={(e) => {
+                  e.target.value = formatNumberWithCommas(formData.phxMonthlyRevenueActual);
+                }}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/[^0-9.]/g, '');
+                  setFormData(prev => ({...prev, phxMonthlyRevenueActual: value}));
+                  setIsFormModified(true);
+                }}
+              />
+              <span className="ml-1 text-gray-500">Actual</span>
+            </div>
+            
+            <div className="text-right">
+              <span className="text-gray-500">Goal: $</span>
+              <input
+                type="text"
+                className="w-24 font-bold text-gray-700 border-b border-dashed border-gray-300 focus:outline-none focus:border-orange-500 bg-transparent"
+                value={formatNumberWithCommas(formData.phxMonthlyRevenueGoal)}
+                onFocus={(e) => {
+                  e.target.value = formData.phxMonthlyRevenueGoal;
+                }}
+                onBlur={(e) => {
+                  e.target.value = formatNumberWithCommas(formData.phxMonthlyRevenueGoal);
+                }}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/[^0-9.]/g, '');
+                  setFormData(prev => ({...prev, phxMonthlyRevenueGoal: value}));
+                  setIsFormModified(true);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <FormField
+        label=""
+        name="closingDeals"
+        value={formData.closingDeals}
+        onChange={handleInputChange}
+        placeholder="Update on deals close to signing"
+        isTextArea
+      />
+    </div>
+
+    <div className="bg-gradient-to-br from-yellow-50 to-white rounded-xl p-6 border border-yellow-200 shadow-sm hover:shadow-md transition-shadow">
+      <div className="mb-4 flex items-center">
+        <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2" />
+        <h3 className="text-lg font-medium text-yellow-700">Hot Properties</h3>
+      </div>
+      <FormField
+        label=""
+        name="hotProperties"
+        value={formData.hotProperties || ''}
+        onChange={handleInputChange}
+        placeholder="Properties with high potential or activity"
+        isTextArea
+      />
+    </div>
   </div>
   
-  {/* Monthly Revenue Goals with Edit Capability */}
-  <div className="bg-white p-3 rounded-lg border border-green-100 mb-4">
-    <div className="flex justify-between items-center mb-2">
-      <div className="text-sm font-medium text-gray-600">Monthly Revenue Goals</div>
-      <div className="text-sm font-medium text-gray-600">
-        {selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
-      </div>
+  <div className="space-y-6 flex flex-col">
+  <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-6 border border-blue-200 shadow-sm hover:shadow-md transition-shadow flex-grow flex flex-col">
+    <div className="mb-4 flex items-center">
+      <FileText className="h-5 w-5 text-blue-600 mr-2" />
+      <h3 className="text-lg font-medium text-blue-700">What We're Bidding <span className="text-sm font-normal text-gray-500">(20 minutes)</span></h3>
     </div>
-    
-    {/* Las Vegas Region */}
-    <div className="p-2 border-b border-gray-100">
-      <div className="flex items-center mb-2">
-        <img src="/icons/lv.png" alt="Las Vegas" className="h-5 w-5 mr-2" />
-        <span className="font-medium text-yellow-800">Las Vegas</span>
-        
-        {/* Calculate percentage */}
-        <span className="ml-auto text-xs text-gray-500">
-          {Math.min(100, Math.round((parseFloat(formData.lvMonthlyRevenueActual || '0') / 
-            (parseFloat(formData.lvMonthlyRevenueGoal || '1') || 1)) * 100))}% of goal
-        </span>
-      </div>
-      
-      {/* Progress bar */}
-      <div className="flex items-center">
-        <div className="w-full bg-gray-100 rounded-full h-2.5">
-          <div 
-            className={`${parseFloat(formData.lvMonthlyRevenueActual || '0') >= parseFloat(formData.lvMonthlyRevenueGoal || '0') 
-              ? 'bg-green-600' : 'bg-yellow-500'} h-2.5 rounded-full`}
-            style={{ 
-              width: `${Math.min(100, Math.round((parseFloat(formData.lvMonthlyRevenueActual || '0') / 
-                (parseFloat(formData.lvMonthlyRevenueGoal || '1') || 1)) * 100))}%` 
-            }} 
-          ></div>
-        </div>
-      </div>
-      
-      {/* Editable values */}
-      <div className="mt-2 flex justify-between text-sm">
-      <div>
-  <span className="mr-1 text-gray-500">$</span>
-  <input
-    type="text"
-    className="w-24 font-bold text-yellow-700 border-b border-dashed border-gray-300 focus:outline-none focus:border-yellow-500 bg-transparent"
-    value={formatNumberWithCommas(formData.lvMonthlyRevenueActual)}
-    onFocus={(e) => {
-      // Show raw value (without commas) when focused
-      e.target.value = formData.lvMonthlyRevenueActual;
-    }}
-    onBlur={(e) => {
-      // Format with commas when focus is lost
-      e.target.value = formatNumberWithCommas(formData.lvMonthlyRevenueActual);
-    }}
-    onChange={(e) => {
-      // Only allow numbers and decimals
-      const value = e.target.value.replace(/[^0-9.]/g, '');
-      setFormData(prev => ({...prev, lvMonthlyRevenueActual: value}));
-      setIsFormModified(true);
-    }}
-  />
-  <span className="ml-1 text-gray-500">Actual</span>
-</div>
-        <div className="text-right">
-          <span className="text-gray-500">Goal: $</span>
-          <input
-  type="text"
-  className="w-24 font-bold text-gray-700 border-b border-dashed border-gray-300 focus:outline-none focus:border-yellow-500 bg-transparent"
-  value={formatNumberWithCommas(formData.lvMonthlyRevenueGoal)}
-  onFocus={(e) => {
-    // Show raw value (without commas) when focused
-    e.target.value = formData.lvMonthlyRevenueGoal;
-  }}
-  onBlur={(e) => {
-    // Format with commas when focus is lost
-    e.target.value = formatNumberWithCommas(formData.lvMonthlyRevenueGoal);
-  }}
-  onChange={(e) => {
-    // Only allow numbers and decimals
-    const value = e.target.value.replace(/[^0-9.]/g, '');
-    setFormData(prev => ({...prev, lvMonthlyRevenueGoal: value}));
-    setIsFormModified(true);
-  }}
-/>
-        </div>
-      </div>
-    </div>
-    
-    {/* Phoenix Region */}
-    <div className="p-2 pt-3">
-      <div className="flex items-center mb-2">
-        <img src="/icons/az.png" alt="Phoenix" className="h-5 w-5 mr-2" />
-        <span className="font-medium text-orange-800">Phoenix</span>
-        
-        {/* Calculate percentage */}
-        <span className="ml-auto text-xs text-gray-500">
-          {Math.min(100, Math.round((parseFloat(formData.phxMonthlyRevenueActual || '0') / 
-            (parseFloat(formData.phxMonthlyRevenueGoal || '1') || 1)) * 100))}% of goal
-        </span>
-      </div>
-      
-      {/* Progress bar */}
-      <div className="flex items-center">
-        <div className="w-full bg-gray-100 rounded-full h-2.5">
-          <div 
-            className={`${parseFloat(formData.phxMonthlyRevenueActual || '0') >= parseFloat(formData.phxMonthlyRevenueGoal || '0') 
-              ? 'bg-green-600' : 'bg-orange-500'} h-2.5 rounded-full`}
-            style={{ 
-              width: `${Math.min(100, Math.round((parseFloat(formData.phxMonthlyRevenueActual || '0') / 
-                (parseFloat(formData.phxMonthlyRevenueGoal || '1') || 1)) * 100))}%` 
-            }} 
-          ></div>
-        </div>
-      </div>
-      
-      {/* Editable values */}
-      <div className="mt-2 flex justify-between text-sm">
-      <div>
-  <span className="mr-1 text-gray-500">$</span>
-  <input
-    type="text"
-    className="w-24 font-bold text-orange-700 border-b border-dashed border-gray-300 focus:outline-none focus:border-orange-500 bg-transparent"
-    value={formatNumberWithCommas(formData.phxMonthlyRevenueActual)}
-    onFocus={(e) => {
-      e.target.value = formData.phxMonthlyRevenueActual;
-    }}
-    onBlur={(e) => {
-      e.target.value = formatNumberWithCommas(formData.phxMonthlyRevenueActual);
-    }}
-    onChange={(e) => {
-      const value = e.target.value.replace(/[^0-9.]/g, '');
-      setFormData(prev => ({...prev, phxMonthlyRevenueActual: value}));
-      setIsFormModified(true);
-    }}
-  />
-  <span className="ml-1 text-gray-500">Actual</span>
-</div>
-
-<div className="text-right">
-  <span className="text-gray-500">Goal: $</span>
-  <input
-    type="text"
-    className="w-24 font-bold text-gray-700 border-b border-dashed border-gray-300 focus:outline-none focus:border-orange-500 bg-transparent"
-    value={formatNumberWithCommas(formData.phxMonthlyRevenueGoal)}
-    onFocus={(e) => {
-      e.target.value = formData.phxMonthlyRevenueGoal;
-    }}
-    onBlur={(e) => {
-      e.target.value = formatNumberWithCommas(formData.phxMonthlyRevenueGoal);
-    }}
-    onChange={(e) => {
-      const value = e.target.value.replace(/[^0-9.]/g, '');
-      setFormData(prev => ({...prev, phxMonthlyRevenueGoal: value}));
-      setIsFormModified(true);
-    }}
-  />
-</div>
-      </div>
-    </div>
+    <textarea
+      name="biddingDeals"
+      value={formData.biddingDeals}
+      onChange={handleInputChange}
+      placeholder="Current bid status and updates"
+      className="flex-grow w-full bg-white border border-gray-200 rounded-lg p-3 transition-colors duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 min-h-[120px]"
+    />
   </div>
-  
-  <FormField
-    label=""
-    name="closingDeals"
-    value={formData.closingDeals}
-    onChange={handleInputChange}
-    placeholder="Update on deals close to signing"
-    isTextArea
-  />
-</div>
-
-<div className="bg-gradient-to-br from-yellow-50 to-white rounded-xl p-6 border border-yellow-200 shadow-sm hover:shadow-md transition-shadow">
-  <div className="mb-4 flex items-center">
-    <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2" />
-    <h3 className="text-lg font-medium text-yellow-700">Hot Properties</h3>
-  </div>
-  <FormField
-    label=""
-    name="hotProperties"
-    value={formData.hotProperties || ''}
-    onChange={handleInputChange}
-    placeholder="Properties with high potential or activity"
-    isTextArea
-  />
-</div>
-                        </div>
-                        
-                        <div className="space-y-6">
-                        <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-6 border border-blue-200 shadow-sm hover:shadow-md transition-shadow">
-  <div className="mb-4 flex items-center">
-    <FileText className="h-5 w-5 text-blue-600 mr-2" />
-    <h3 className="text-lg font-medium text-blue-700">What We're Bidding <span className="text-sm font-normal text-gray-500">(20 minutes)</span></h3>
-  </div>
-  <FormField
-    label=""
-    name="biddingDeals"
-    value={formData.biddingDeals}
-    onChange={handleInputChange}
-    placeholder="Current bid status and updates"
-    isTextArea
-  />
-</div>
                           
-                          <div className="bg-gradient-to-br from-red-50 to-white rounded-xl p-6 border border-red-200 shadow-sm hover:shadow-md transition-shadow">
-  <div className="mb-4 flex items-center">
-    <FileX className="h-5 w-5 text-red-600 mr-2" />
-    <h3 className="text-lg font-medium text-red-700">Terminations/Ownership Changes</h3>
+    <div className="bg-gradient-to-br from-red-50 to-white rounded-xl p-6 border border-red-200 shadow-sm hover:shadow-md transition-shadow">
+      <div className="mb-4 flex items-center">
+        <FileX className="h-5 w-5 text-red-600 mr-2" />
+        <h3 className="text-lg font-medium text-red-700">Terminations/Ownership Changes</h3>
+      </div>
+      <FormField
+        label=""
+        name="terminationChanges"
+        value={formData.terminationChanges || ''}
+        onChange={handleInputChange}
+        placeholder="Account terminations or ownership changes to monitor"
+        isTextArea
+      />
+    </div>
   </div>
-  <FormField
-    label=""
-    name="terminationChanges"
-    value={formData.terminationChanges || ''}
-    onChange={handleInputChange}
-    placeholder="Account terminations or ownership changes to monitor"
-    isTextArea
-  />
-</div>
-</div>
 </div>
 
 {/* Add the CalendarEventsView component here */}

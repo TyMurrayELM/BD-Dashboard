@@ -3313,6 +3313,18 @@ const RevenueDetailsModal = () => {
                   <span className="font-medium">Vision Traction</span>
                 </TabsTrigger>
                 <TabsTrigger 
+  value="general" 
+  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all duration-200 ${
+    activeTab === "general" 
+      ? "bg-white shadow-md text-blue-600 border-b-2 border-blue-600 transform scale-[1.02]" 
+      : "text-gray-600 hover:bg-blue-100 bg-blue-50"
+  }`}
+>
+  {/* Choose an appropriate icon from the lucide-react library */}
+  <TrendingUp className="w-5 h-5" />
+  <span className="font-medium">General</span>
+</TabsTrigger>
+                <TabsTrigger 
                   value="presentations" 
                   className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all duration-200 ${
                     activeTab === "presentations" 

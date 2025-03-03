@@ -26,6 +26,8 @@ const CalendarEventsView: React.FC<CalendarEventsViewProps> = ({
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [showEventModal, setShowEventModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   
   // New event form data
   const [newEvent, setNewEvent] = useState({
@@ -89,22 +91,58 @@ const CalendarEventsView: React.FC<CalendarEventsViewProps> = ({
     return associationEvents.filter(event => event.date === formattedDate);
   };
   
-  // Add a new event
-  const addEvent = () => {
+  // Open edit modal for an existing event
+  const editEvent = (event: AssociationEvent) => {
+    setIsEditing(true);
+    setEditingEventId(event.id);
+    setNewEvent({
+      title: event.title,
+      date: event.date,
+      location: event.location,
+      assignee: event.assignee
+    });
+    setShowEventModal(true);
+  };
+  
+  // Save an event (handles both add and edit)
+  const saveEvent = () => {
     if (newEvent.title && newEvent.date) {
-      const updatedEvents = [
-        ...associationEvents,
-        {
-          id: null, // Will be assigned by the server on save
-          title: newEvent.title,
-          date: newEvent.date,
-          location: newEvent.location,
-          assignee: newEvent.assignee
-        }
-      ];
+      if (isEditing) {
+        // Update existing event
+        const updatedEvents = associationEvents.map(event => {
+          if ((event.id === editingEventId) || 
+              (editingEventId === null && event.id === null && 
+               event.title === newEvent.title && event.date === newEvent.date)) {
+            return {
+              ...event,
+              title: newEvent.title,
+              date: newEvent.date,
+              location: newEvent.location,
+              assignee: newEvent.assignee
+            };
+          }
+          return event;
+        });
+        onEventsChange(updatedEvents);
+      } else {
+        // Add new event
+        const updatedEvents = [
+          ...associationEvents,
+          {
+            id: `temp-${Date.now()}`, // Temporary ID until saved to DB
+            title: newEvent.title,
+            date: newEvent.date,
+            location: newEvent.location,
+            assignee: newEvent.assignee
+          }
+        ];
+        onEventsChange(updatedEvents);
+      }
       
-      onEventsChange(updatedEvents);
+      // Reset state
       setShowEventModal(false);
+      setIsEditing(false);
+      setEditingEventId(null);
       setNewEvent({
         title: '',
         date: '',
@@ -121,6 +159,19 @@ const CalendarEventsView: React.FC<CalendarEventsViewProps> = ({
         (event.id === null && event.title === eventToDelete.title && event.date === eventToDelete.date))
     );
     onEventsChange(updatedEvents);
+    
+    // If we're currently editing this event, close the modal
+    if (showEventModal && isEditing && eventToDelete.id === editingEventId) {
+      setShowEventModal(false);
+      setIsEditing(false);
+      setEditingEventId(null);
+      setNewEvent({
+        title: '',
+        date: '',
+        location: '',
+        assignee: ''
+      });
+    }
   };
   
   // Get all calendar days
@@ -199,6 +250,8 @@ const CalendarEventsView: React.FC<CalendarEventsViewProps> = ({
                 if (day.isCurrentMonth && day.formattedDate) {
                   setSelectedDate(day.formattedDate);
                   setNewEvent({...newEvent, date: day.formattedDate});
+                  setIsEditing(false);
+                  setEditingEventId(null);
                   setShowEventModal(true);
                 }
               }}
@@ -218,7 +271,11 @@ const CalendarEventsView: React.FC<CalendarEventsViewProps> = ({
                     {day.formattedDate && getEventsForDate(day.formattedDate).map((event, eventIndex) => (
                       <div 
                         key={eventIndex} 
-                        className="p-1 mb-1 text-xs rounded bg-blue-100 border border-blue-200"
+                        className="p-1 mb-1 text-xs rounded bg-blue-100 border border-blue-200 cursor-pointer hover:bg-blue-200"
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent triggering the day cell click
+                          editEvent(event);
+                        }}
                       >
                         <div className="font-medium truncate">{event.title}</div>
                         {event.location && (
@@ -246,6 +303,8 @@ const CalendarEventsView: React.FC<CalendarEventsViewProps> = ({
             onClick={() => {
               setSelectedDate(new Date().toISOString().split('T')[0]);
               setNewEvent({...newEvent, date: new Date().toISOString().split('T')[0]});
+              setIsEditing(false);
+              setEditingEventId(null);
               setShowEventModal(true);
             }}
           >
@@ -260,7 +319,8 @@ const CalendarEventsView: React.FC<CalendarEventsViewProps> = ({
             .map((event, index) => (
               <div 
                 key={index} 
-                className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50"
+                className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 cursor-pointer"
+                onClick={() => editEvent(event)}
               >
                 <div>
                   <div className="font-medium text-gray-900">{event.title}</div>
@@ -293,7 +353,9 @@ const CalendarEventsView: React.FC<CalendarEventsViewProps> = ({
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
             <div className="px-6 py-4 bg-blue-50 border-b border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900">Add New Event</h3>
+              <h3 className="text-lg font-medium text-gray-900">
+                {isEditing ? 'Edit Event' : 'Add New Event'}
+              </h3>
             </div>
             <div className="p-6">
               <div className="space-y-4">
@@ -346,29 +408,48 @@ const CalendarEventsView: React.FC<CalendarEventsViewProps> = ({
                 </div>
               </div>
             </div>
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end">
-              <Button
-                variant="outline"
-                className="mr-2"
-                onClick={() => {
-                  setShowEventModal(false);
-                  setNewEvent({
-                    title: '',
-                    date: '',
-                    location: '',
-                    assignee: ''
-                  });
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="bg-blue-600 hover:bg-blue-700"
-                onClick={addEvent}
-                disabled={!newEvent.title || !newEvent.date}
-              >
-                Add Event
-              </Button>
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-between">
+              {isEditing && (
+                <Button
+                  variant="outline"
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={() => {
+                    const eventToDelete = associationEvents.find(event => event.id === editingEventId);
+                    if (eventToDelete) {
+                      deleteEvent(eventToDelete);
+                    }
+                    setShowEventModal(false);
+                  }}
+                >
+                  Delete
+                </Button>
+              )}
+              <div className={isEditing ? '' : 'ml-auto'}>
+                <Button
+                  variant="outline"
+                  className="mr-2"
+                  onClick={() => {
+                    setShowEventModal(false);
+                    setIsEditing(false);
+                    setEditingEventId(null);
+                    setNewEvent({
+                      title: '',
+                      date: '',
+                      location: '',
+                      assignee: ''
+                    });
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="bg-blue-600 hover:bg-blue-700"
+                  onClick={saveEvent}
+                  disabled={!newEvent.title || !newEvent.date}
+                >
+                  {isEditing ? 'Save Changes' : 'Add Event'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

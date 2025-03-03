@@ -29,6 +29,7 @@ import {
   ShieldQuestion, // For Obejctions
   UsersRound, // add this for Association Memberships
   TrendingUp, // for header
+  X,
 } from 'lucide-react';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import CalendarEventsView from './CalendarEventsView';
@@ -79,6 +80,16 @@ interface AssociationEvent {
   assignee: string;
 }
 
+// Update Property Revenue for Monthly Revenue Detail
+interface PropertyRevenue {
+  id: string | null;
+  name: string;
+  revenue: number;
+  isEditing?: boolean;
+  // Add this field for temporary editing
+  tempRevenue?: string;
+}
+
 interface YearlyGoals {
   id: string | null;
   year: number;
@@ -89,6 +100,15 @@ interface YearlyGoals {
   retentionDescription: string;
   currentRevenue: string;
   currentRetention: string;
+}
+
+interface PropertyRevenue {
+  name: string;
+  revenue: number;
+}
+
+interface PropertyRevenueData {
+  [key: string]: PropertyRevenue[];
 }
 
 interface Issue {
@@ -670,6 +690,8 @@ const BDDashboard = () => {
   // ========================
   // State Management
   // ========================
+ 
+
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
@@ -688,7 +710,30 @@ const BDDashboard = () => {
   const [cachedFormData, setCachedFormData] = useState<CachedFormData>({});
   const [currentMeetingId, setCurrentMeetingId] = useState<string | null>(null);
   const lastFetchedRef = useRef<{[key: string]: number}>({});
+  const revenueInputRefs = useRef({});
   
+// 3. Add these state variables inside your BDDashboard component for Revenue Details
+const [showRevenueDetails, setShowRevenueDetails] = useState<boolean>(false);
+const [activeRegionDetails, setActiveRegionDetails] = useState<'Las Vegas' | 'Phoenix' | null>(null);
+
+// Property revenues data (sample data for the modal)
+const [propertyRevenues, setPropertyRevenues] = useState<PropertyRevenueData>({
+  'Las Vegas': [
+    { name: 'Downtown Office Plaza', revenue: 125000 },
+    { name: 'Summerlin Business Park', revenue: 82500 },
+    { name: 'Henderson Medical Center', revenue: 67000 },
+    { name: 'Spring Valley Shopping Center', revenue: 45000 },
+    { name: 'Warm Springs Corporate Park', revenue: 93000 }
+  ],
+  'Phoenix': [
+    { name: 'Camelback Corporate Center', revenue: 105000 },
+    { name: 'Scottsdale Office Tower', revenue: 78000 },
+    { name: 'Tempe Technology Park', revenue: 113000 },
+    { name: 'Glendale Shopping Mall', revenue: 59000 },
+    { name: 'Mesa Medical Complex', revenue: 69500 }
+  ]
+});
+
 // Update to
 const [formData, setFormData] = useState<FormData>({
   attendees: '',
@@ -924,6 +969,7 @@ const fetchData = useCallback(async () => {
   }
 }, [activeTab, selectedWeek, supabase, connectionError, isTargetListModified]);
 // Fetch Level 10 Meeting data for the selected week
+// Fetch Level 10 Meeting data for the selected week
 const fetchMeetingForWeek = useCallback(async (weekStartDate: string) => {
   if (!supabase) return;
   
@@ -933,12 +979,53 @@ const fetchMeetingForWeek = useCallback(async (weekStartDate: string) => {
     return;
   }
   
+  // Add this to your fetchMeetingForWeek function. Fetches Property Revenue
+  const fetchPropertyRevenues = async (meetingId: string) => {
+    if (!supabase) return;
+    
+    const { data, error } = await supabase
+      .from('property_revenues')
+      .select('*')
+      .eq('meeting_id', meetingId);
+      
+    if (error) {
+      console.error('Error fetching property revenues:', error);
+      return;
+    }
+    
+    if (data && data.length > 0) {
+      // Group by region
+      const revenuesByRegion: PropertyRevenueData = {
+        'Las Vegas': [],
+        'Phoenix': []
+      };
+      
+      data.forEach(revenue => {
+        if (revenuesByRegion[revenue.region]) {
+          revenuesByRegion[revenue.region].push({
+            id: revenue.id,
+            name: revenue.property_name,
+            revenue: revenue.revenue
+          });
+        }
+      });
+      
+      setPropertyRevenues(revenuesByRegion);
+    }
+  };
+
   const cacheKey = `level10_${weekStartDate}`;
   if (cachedFormData[cacheKey]) {
     console.log('Using cached data for', cacheKey);
     setFormData(cachedFormData[cacheKey].formData);
     setSelectedDate(cachedFormData[cacheKey].selectedDate);
     setCurrentMeetingId(cachedFormData[cacheKey].currentMeetingId);
+    
+    // If we have a meeting ID in the cache, fetch property revenues
+    if (cachedFormData[cacheKey].currentMeetingId) {
+      await fetchPropertyRevenues(cachedFormData[cacheKey].currentMeetingId);
+    }
+    
     return;
   }
   
@@ -981,9 +1068,9 @@ const fetchMeetingForWeek = useCallback(async (weekStartDate: string) => {
         associationUpdate: data[0].association_update || '',
         associationEvents: [],
         lvMonthlyRevenueActual: data[0].lv_monthly_revenue_actual?.toString() || '0',
-      lvMonthlyRevenueGoal: data[0].lv_monthly_revenue_goal?.toString() || '0',
-      phxMonthlyRevenueActual: data[0].phx_monthly_revenue_actual?.toString() || '0',
-      phxMonthlyRevenueGoal: data[0].phx_monthly_revenue_goal?.toString() || '0' // Will be populated below
+        lvMonthlyRevenueGoal: data[0].lv_monthly_revenue_goal?.toString() || '0',
+        phxMonthlyRevenueActual: data[0].phx_monthly_revenue_actual?.toString() || '0',
+        phxMonthlyRevenueGoal: data[0].phx_monthly_revenue_goal?.toString() || '0'
       };
       
       // Fetch associated events for this meeting
@@ -1006,6 +1093,9 @@ const fetchMeetingForWeek = useCallback(async (weekStartDate: string) => {
             assignee: event.assignee || ''
           }));
         }
+        
+        // Fetch property revenues for this meeting
+        await fetchPropertyRevenues(data[0].id);
       }
       
       setFormData(newFormData);
@@ -1036,10 +1126,9 @@ const fetchMeetingForWeek = useCallback(async (weekStartDate: string) => {
         associationUpdate: '',
         associationEvents: [],
         lvMonthlyRevenueActual: '0',
-      lvMonthlyRevenueGoal: '0',
-      phxMonthlyRevenueActual: '0',
-      phxMonthlyRevenueGoal: '0'
-    
+        lvMonthlyRevenueGoal: '0',
+        phxMonthlyRevenueActual: '0',
+        phxMonthlyRevenueGoal: '0'
       };
       
       setFormData(resetFormData);
@@ -1460,6 +1549,249 @@ const handleTabChange = (value: string) => {
     setFormData((prev: FormData) => ({ ...prev, [name]: value }));
     setIsFormModified(true);
   };
+
+// 5. Add this function to handle opening the detail modal
+const handleShowDetails = (region: 'Las Vegas' | 'Phoenix') => {
+  setActiveRegionDetails(region);
+  setShowRevenueDetails(true);
+};
+
+// After your existing event handlers like handleInputChange, handleShowDetails, etc.
+// but before the return statement
+
+// Property revenue event handlers
+const handlePropertyNameChange = (index: number, value: string) => {
+  setPropertyRevenues((prev) => {
+    const newData = { ...prev };
+    if (activeRegionDetails) {
+      newData[activeRegionDetails] = [...newData[activeRegionDetails]];
+      newData[activeRegionDetails][index] = {
+        ...newData[activeRegionDetails][index],
+        name: value
+      };
+    }
+    return newData;
+  });
+};
+
+
+
+
+
+const handlePropertyEdit = (index: number) => {
+  setPropertyRevenues((prev) => {
+    const newData = { ...prev };
+    if (activeRegionDetails) {
+      newData[activeRegionDetails] = [...newData[activeRegionDetails]];
+      newData[activeRegionDetails][index] = {
+        ...newData[activeRegionDetails][index],
+        isEditing: true,
+        // Initialize the temp field with the current revenue
+        tempRevenue: newData[activeRegionDetails][index].revenue.toString()
+      };
+    }
+    return newData;
+  });
+};
+
+// Update the handlePropertySave function to add console logging
+const handlePropertySave = async (index) => {
+  if (!supabase || !activeRegionDetails || !currentMeetingId) return;
+  
+  try {
+    console.log('Saving property at index:', index);
+    setSaveStatus('saving');
+    
+    // Get the current property from state
+    const property = propertyRevenues[activeRegionDetails][index];
+    
+    // Try multiple approaches to get the current value to ensure we don't miss it
+    let inputValue;
+    
+    // 1. Try the ref approach first
+    if (revenueInputRefs.current[activeRegionDetails] && 
+        revenueInputRefs.current[activeRegionDetails][index]) {
+      inputValue = revenueInputRefs.current[activeRegionDetails][index].value;
+      console.log('Got value from ref:', inputValue);
+    } 
+    // 2. Then try direct DOM query as fallback
+    else {
+      const inputElement = document.querySelector(`[data-property-index="${index}"]`);
+      if (inputElement) {
+        inputValue = inputElement.value;
+        console.log('Got value from DOM:', inputValue);
+      }
+      // 3. Finally use the state value if all else fails
+      else {
+        inputValue = property.tempRevenue || property.revenue.toString();
+        console.log('Using state value:', inputValue);
+      }
+    }
+    
+    // Parse the numeric value from input
+    const numValue = parseFloat(inputValue.replace(/[^0-9.]/g, '')) || 0;
+    console.log('Parsed numeric value:', numValue);
+    
+    const propertyData = {
+      meeting_id: currentMeetingId,
+      region: activeRegionDetails,
+      property_name: property.name,
+      revenue: numValue,
+      month_date: new Date(selectedDate).toISOString().split('T')[0],
+      updated_at: new Date().toISOString()
+    };
+    
+    // Update in database
+    if (property.id) {
+      console.log('Updating existing property with ID:', property.id);
+      const { error } = await supabase
+        .from('property_revenues')
+        .update(propertyData)
+        .eq('id', property.id);
+        
+      if (error) throw error;
+    } else {
+      console.log('Inserting new property');
+      const { data, error } = await supabase
+        .from('property_revenues')
+        .insert(propertyData)
+        .select();
+        
+      if (error) throw error;
+      
+      // Update the ID if this was a new property
+      if (data && data.length > 0) {
+        setPropertyRevenues((prev) => {
+          const newData = { ...prev };
+          if (activeRegionDetails) {
+            newData[activeRegionDetails] = [...newData[activeRegionDetails]];
+            newData[activeRegionDetails][index] = {
+              ...newData[activeRegionDetails][index],
+              id: data[0].id
+            };
+          }
+          return newData;
+        });
+      }
+    }
+    
+    // Update the property in state with the parsed value and turn off edit mode
+    setPropertyRevenues((prev) => {
+      const newData = { ...prev };
+      if (activeRegionDetails) {
+        newData[activeRegionDetails] = [...newData[activeRegionDetails]];
+        newData[activeRegionDetails][index] = {
+          ...newData[activeRegionDetails][index],
+          revenue: numValue,
+          isEditing: false,
+          tempRevenue: undefined // Clear temp value
+        };
+      }
+      return newData;
+    });
+    
+    // Update total revenue for the region
+    const updatedProperties = [...propertyRevenues[activeRegionDetails]];
+    updatedProperties[index].revenue = numValue;
+    const totalRevenue = updatedProperties.reduce((sum, prop) => sum + prop.revenue, 0);
+    
+    setFormData(prev => ({
+      ...prev,
+      ...(activeRegionDetails === 'Las Vegas' 
+        ? { lvMonthlyRevenueActual: totalRevenue.toString() }
+        : { phxMonthlyRevenueActual: totalRevenue.toString() })
+    }));
+    
+    setIsFormModified(true);
+    setSaveStatus('success');
+    console.log('Save completed successfully');
+    setTimeout(() => setSaveStatus('idle'), 1500);
+    
+  } catch (error) {
+    console.error('Error saving property:', error);
+    setSaveStatus('error');
+    setTimeout(() => setSaveStatus('idle'), 1500);
+  }
+};
+
+// Add a new property function
+const handleAddProperty = () => {
+  if (!activeRegionDetails) return;
+  
+  setPropertyRevenues((prev) => {
+    const newData = { ...prev };
+    newData[activeRegionDetails] = [
+      ...newData[activeRegionDetails],
+      {
+        id: null,
+        name: "New Property",
+        revenue: 0,
+        tempRevenue: "0", // Initialize with a string value
+        isEditing: true
+      }
+    ];
+    return newData;
+  });
+};
+
+// Delete a property function
+const handleDeleteProperty = async (index: number) => {
+  if (!supabase || !activeRegionDetails) return;
+  
+  const property = propertyRevenues[activeRegionDetails][index];
+  
+  try {
+    setSaveStatus('saving');
+    
+    if (property.id) {
+      // Delete from database if it exists
+      const { error } = await supabase
+        .from('property_revenues')
+        .delete()
+        .eq('id', property.id);
+        
+      if (error) throw error;
+    }
+    
+    // Remove from state
+    setPropertyRevenues((prev) => {
+      const newData = { ...prev };
+      if (activeRegionDetails) {
+        newData[activeRegionDetails] = newData[activeRegionDetails].filter((_, i) => i !== index);
+      }
+      return newData;
+    });
+    
+
+    
+    // Update the total revenue
+    const updatedProperties = [...propertyRevenues[activeRegionDetails]];
+    updatedProperties.splice(index, 1);
+    
+    const newTotalRevenue = updatedProperties.reduce(
+      (sum, property) => sum + property.revenue, 0
+    );
+    
+    setFormData(prev => ({
+      ...prev,
+      ...(activeRegionDetails === 'Las Vegas' 
+        ? { lvMonthlyRevenueActual: newTotalRevenue.toString() }
+        : { phxMonthlyRevenueActual: newTotalRevenue.toString() })
+    }));
+    
+    setIsFormModified(true);
+    setSaveStatus('success');
+    setTimeout(() => setSaveStatus('idle'), 1500);
+    
+  } catch (error: any) {
+    console.error('Error deleting property:', error);
+    setSaveStatus('error');
+    setTimeout(() => setSaveStatus('idle'), 1500);
+  }
+};
+
+
+
 
   // Handle yearly goals metrics update - Updated for regions
   const handleMetricsUpdate = (e?: React.FormEvent, region?: string) => {
@@ -1894,6 +2226,39 @@ const saveData = async () => {
         throw error;
       }
       
+// In your saveData function, after saving meeting data
+if (data && data.length > 0) {
+  const meetingId = data[0].id;
+  setCurrentMeetingId(meetingId);
+  
+  // Update all property revenues to link to this meeting
+  for (const region of Object.keys(propertyRevenues)) {
+    for (const property of propertyRevenues[region]) {
+      const propertyData = {
+        meeting_id: meetingId,
+        region: region,
+        property_name: property.name,
+        revenue: property.revenue,
+        month_date: new Date(selectedDate).toISOString().split('T')[0],
+        updated_at: new Date().toISOString()
+      };
+      
+      if (property.id) {
+        // Update existing
+        await supabase
+          .from('property_revenues')
+          .update(propertyData)
+          .eq('id', property.id);
+      } else {
+        // Insert new
+        await supabase
+          .from('property_revenues')
+          .insert(propertyData);
+      }
+    }
+  }
+}
+
       // Now save association events if we have a meeting ID
       if (data && data.length > 0) {
         const meetingId = data[0].id;
@@ -2653,18 +3018,153 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
     }
   }, [activeTab, selectedWeek, connectionError, fetchData, fetchMeetingForWeek, cachedFormData]);
 
-  // Filter targets based on search and rep selection
-  // Filter targets based on search
-const filteredTargets = targets.filter((target: Target) => {
-  return searchQuery === '' || 
-    target.contact_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    target.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    target.properties?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    target.notes?.toLowerCase().includes(searchQuery.toLowerCase());
-});
+// Filter targets based on search
+const filteredTargets = targets
+  .filter((target: Target) => {
+    return searchQuery === '' || 
+      target.contact_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      target.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      target.properties?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      target.notes?.toLowerCase().includes(searchQuery.toLowerCase());
+  })
+  // Add this sort function to sort alphabetically by company name
+  .sort((a: Target, b: Target) => {
+    return (a.company || '').localeCompare(b.company || '');
+  });
 // ========================
   // Render Component - Part 3
   // ========================
+// Add this right before the return ( in your component
+const RevenueDetailsModal = () => {
+  if (!showRevenueDetails || !activeRegionDetails) return null;
+  
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
+        <div className="px-6 py-4 bg-blue-50 border-b border-gray-200 flex justify-between items-center">
+          <h3 className="text-lg font-medium text-gray-900">
+            {activeRegionDetails} Revenue Details
+          </h3>
+          <button 
+            onClick={() => setShowRevenueDetails(false)}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        
+        <div className="p-6">
+          <div className="mb-4">
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium text-gray-600">Total Monthly Revenue:</span>
+              <span className="font-bold text-lg text-green-700">
+                ${formatNumberWithCommas(
+                  activeRegionDetails === 'Las Vegas' 
+                    ? formData.lvMonthlyRevenueActual 
+                    : formData.phxMonthlyRevenueActual
+                )}
+              </span>
+            </div>
+            <div className="text-sm text-gray-500 mt-1">
+              Goal: ${formatNumberWithCommas(
+                activeRegionDetails === 'Las Vegas' 
+                  ? formData.lvMonthlyRevenueGoal 
+                  : formData.phxMonthlyRevenueGoal
+              )}
+            </div>
+          </div>
+          
+          <div className="border-t border-gray-200 pt-4">
+  <div className="flex justify-between items-center mb-2">
+    <h4 className="font-medium">Property Breakdown</h4>
+    <Button 
+      variant="outline" 
+      size="sm"
+      className="text-blue-600 text-xs"
+      onClick={handleAddProperty}
+    >
+      + Add Property
+    </Button>
+  </div>
+  <div className="max-h-64 overflow-y-auto pr-2">
+    <table className="w-full">
+              <thead className="bg-gray-50">
+  <tr>
+    <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Property</th>
+    <th className="py-2 px-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
+    <th className="py-2 px-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+  </tr>
+</thead>
+                <tbody className="divide-y divide-gray-200">
+  {propertyRevenues[activeRegionDetails].map((property, index) => (
+    <tr key={index} className="hover:bg-gray-50">
+      <td className="py-2 px-3 text-sm">
+        {property.isEditing ? (
+          <Input
+            value={property.name}
+            onChange={(e) => handlePropertyNameChange(index, e.target.value)}
+            className="border border-blue-200 p-1 w-full"
+          />
+        ) : (
+          property.name
+        )}
+      </td>
+      <td className="py-2 px-3 text-sm text-right">
+  {property.isEditing ? (
+    // Use a basic HTML input for simplicity
+    <input
+      type="text"
+      data-property-index={index}
+      defaultValue={property.tempRevenue !== undefined ? property.tempRevenue : property.revenue.toString()}
+      className="border border-blue-200 p-1 w-32 text-right"
+      style={{ width: "100px" }}
+      autoFocus
+    />
+  ) : (
+    `${formatNumberWithCommas(property.revenue.toString())}`
+  )}
+</td>
+      <td className="py-2 px-3 text-sm">
+        {property.isEditing ? (
+          <Button 
+            variant="outline" 
+            size="sm"
+            className="border-green-500 text-green-600"
+            onClick={() => handlePropertySave(index)}
+          >
+            Save
+          </Button>
+        ) : (
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => handlePropertyEdit(index)}
+          >
+            Edit
+          </Button>
+        )}
+      </td>
+    </tr>
+  ))}
+</tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-gray-50 px-6 py-3 flex justify-end">
+          <button
+            onClick={() => setShowRevenueDetails(false)}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-50 to-blue-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -2937,16 +3437,24 @@ const filteredTargets = targets.filter((target: Target) => {
         
         {/* Las Vegas Region */}
         <div className="p-2 border-b border-gray-100">
-          <div className="flex items-center mb-2">
-            <img src="/icons/lv.png" alt="Las Vegas" className="h-5 w-5 mr-2" />
-            <span className="font-medium text-yellow-800">Las Vegas</span>
-            
-            {/* Calculate percentage */}
-            <span className="ml-auto text-xs text-gray-500">
-              {Math.min(100, Math.round((parseFloat(formData.lvMonthlyRevenueActual || '0') / 
-                (parseFloat(formData.lvMonthlyRevenueGoal || '1') || 1)) * 100))}% of goal
-            </span>
-          </div>
+  <div className="flex items-center mb-2">
+    <img src="/icons/lv.png" alt="Las Vegas" className="h-5 w-5 mr-2" />
+    <span className="font-medium text-yellow-800">Las Vegas</span>
+    
+    {/* Add Detail button */}
+    <button
+      onClick={() => handleShowDetails('Las Vegas')}
+      className="ml-2 px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 transition-colors"
+    >
+      Detail
+    </button>
+    
+    {/* Calculate percentage */}
+    <span className="ml-auto text-xs text-gray-500">
+      {Math.min(100, Math.round((parseFloat(formData.lvMonthlyRevenueActual || '0') / 
+        (parseFloat(formData.lvMonthlyRevenueGoal || '1') || 1)) * 100))}% of goal
+    </span>
+  </div>
           
           {/* Progress bar */}
           <div className="flex items-center">
@@ -3012,16 +3520,24 @@ const filteredTargets = targets.filter((target: Target) => {
         
         {/* Phoenix Region */}
         <div className="p-2 pt-3">
-          <div className="flex items-center mb-2">
-            <img src="/icons/az.png" alt="Phoenix" className="h-5 w-5 mr-2" />
-            <span className="font-medium text-orange-800">Phoenix</span>
-            
-            {/* Calculate percentage */}
-            <span className="ml-auto text-xs text-gray-500">
-              {Math.min(100, Math.round((parseFloat(formData.phxMonthlyRevenueActual || '0') / 
-                (parseFloat(formData.phxMonthlyRevenueGoal || '1') || 1)) * 100))}% of goal
-            </span>
-          </div>
+  <div className="flex items-center mb-2">
+    <img src="/icons/az.png" alt="Phoenix" className="h-5 w-5 mr-2" />
+    <span className="font-medium text-orange-800">Phoenix</span>
+    
+    {/* Add Detail button */}
+    <button
+      onClick={() => handleShowDetails('Phoenix')}
+      className="ml-2 px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded hover:bg-orange-200 transition-colors"
+    >
+      Detail
+    </button>
+    
+    {/* Calculate percentage */}
+    <span className="ml-auto text-xs text-gray-500">
+      {Math.min(100, Math.round((parseFloat(formData.phxMonthlyRevenueActual || '0') / 
+        (parseFloat(formData.phxMonthlyRevenueGoal || '1') || 1)) * 100))}% of goal
+    </span>
+  </div>
           
           {/* Progress bar */}
           <div className="flex items-center">
@@ -4196,6 +4712,7 @@ const filteredTargets = targets.filter((target: Target) => {
           </div>
         )}
       </div>
+      <RevenueDetailsModal />
     </div>
   );
 };

@@ -31,6 +31,7 @@ import {
   TrendingUp, // for header
 } from 'lucide-react';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import CalendarEventsView from './CalendarEventsView';
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, isSameDay, addDays } from 'date-fns';
 
 // Data Types and Interfaces
@@ -42,6 +43,17 @@ interface FormData {
   biddingDeals: string;
   hotProperties: string;
   terminationChanges: string;
+  associationUpdate: string;
+  associationEvents: AssociationEvent[];
+}
+
+// Add this new interface underneath
+interface AssociationEvent {
+  id: string | null;
+  title: string;
+  date: string;
+  location: string;
+  assignee: string;
 }
 
 interface YearlyGoals {
@@ -654,16 +666,18 @@ const BDDashboard = () => {
   const [currentMeetingId, setCurrentMeetingId] = useState<string | null>(null);
   const lastFetchedRef = useRef<{[key: string]: number}>({});
   
-  // Level 10 meeting form data
-  const [formData, setFormData] = useState<FormData>({
-    attendees: '',
-    safetyMessage: '',
-    encoreValues: '',
-    closingDeals: '',
-    biddingDeals: '',
-    hotProperties: '',
-    terminationChanges: ''
-  });
+// Update to
+const [formData, setFormData] = useState<FormData>({
+  attendees: '',
+  safetyMessage: '',
+  encoreValues: '',
+  closingDeals: '',
+  biddingDeals: '',
+  hotProperties: '',
+  terminationChanges: '',
+  associationUpdate: '',
+  associationEvents: []
+});
 
   // Vision Traction Organizer data - Updated for regions
   const [yearlyGoals, setYearlyGoals] = useState<{[key: string]: YearlyGoals}>({
@@ -883,107 +897,135 @@ const fetchData = useCallback(async () => {
   }
 }, [activeTab, selectedWeek, supabase, connectionError, isTargetListModified]);
 // Fetch Level 10 Meeting data for the selected week
-  const fetchMeetingForWeek = useCallback(async (weekStartDate: string) => {
-    if (!supabase) return;
+const fetchMeetingForWeek = useCallback(async (weekStartDate: string) => {
+  if (!supabase) return;
+  
+  const lastSaveTime = window.localStorage.getItem('lastSaveTime');
+  if (lastSaveTime && (new Date().getTime() - parseInt(lastSaveTime)) < 2000) {
+    console.log('Skipping fetch right after save (within 2 seconds of save)');
+    return;
+  }
+  
+  const cacheKey = `level10_${weekStartDate}`;
+  if (cachedFormData[cacheKey]) {
+    console.log('Using cached data for', cacheKey);
+    setFormData(cachedFormData[cacheKey].formData);
+    setSelectedDate(cachedFormData[cacheKey].selectedDate);
+    setCurrentMeetingId(cachedFormData[cacheKey].currentMeetingId);
+    return;
+  }
+  
+  try {
+    console.log('Fetching meeting for week starting:', weekStartDate);
+    const weekStart = new Date(weekStartDate);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
     
-    const lastSaveTime = window.localStorage.getItem('lastSaveTime');
-    if (lastSaveTime && (new Date().getTime() - parseInt(lastSaveTime)) < 2000) {
-      console.log('Skipping fetch right after save (within 2 seconds of save)');
-      return;
-    }
+    const { data, error } = await supabase
+      .from('level10_meetings')
+      .select('*')
+      .gte('meeting_date', weekStart.toISOString())
+      .lte('meeting_date', weekEnd.toISOString())
+      .order('meeting_date', { ascending: false })
+      .limit(1);
     
-    const cacheKey = `level10_${weekStartDate}`;
-    if (cachedFormData[cacheKey]) {
-      console.log('Using cached data for', cacheKey);
-      setFormData(cachedFormData[cacheKey].formData);
-      setSelectedDate(cachedFormData[cacheKey].selectedDate);
-      setCurrentMeetingId(cachedFormData[cacheKey].currentMeetingId);
-      return;
-    }
-    
-    try {
-      console.log('Fetching meeting for week starting:', weekStartDate);
-      const weekStart = new Date(weekStartDate);
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekEnd.getDate() + 6);
-      
-      const { data, error } = await supabase
-        .from('level10_meetings')
-        .select('*')
-        .gte('meeting_date', weekStart.toISOString())
-        .lte('meeting_date', weekEnd.toISOString())
-        .order('meeting_date', { ascending: false })
-        .limit(1);
-      
-      if (error) {
-        console.error('Error details from Supabase:', error);
-        if (error.message?.includes('relation') && error.message?.includes('does not exist')) {
-          console.log('Tables do not exist, returning with default data');
-          return;
-        }
-        throw error;
+    if (error) {
+      console.error('Error details from Supabase:', error);
+      if (error.message?.includes('relation') && error.message?.includes('does not exist')) {
+        console.log('Tables do not exist, returning with default data');
+        return;
       }
-      
-      console.log('Meeting data for week:', data);
-      
-      if (data && data.length > 0) {
-        console.log('Setting form data from database:', data[0]);
-        const newFormData: FormData = {
-          attendees: data[0].attendees || '',
-          safetyMessage: data[0].safety_message || '',
-          encoreValues: data[0].encore_values || '',
-          closingDeals: data[0].closing_deals || '',
-          biddingDeals: data[0].bidding_deals || '',
-          hotProperties: data[0].hot_properties || '',
-          terminationChanges: data[0].termination_changes || ''
-        };
-        
-        setFormData(newFormData);
-        if (data[0].meeting_date) {
-          setSelectedDate(new Date(data[0].meeting_date));
-        }
-        setCurrentMeetingId(data[0].id);
-        
-        setCachedFormData((prev: CachedFormData) => ({
-          ...prev,
-          [cacheKey]: {
-            formData: newFormData,
-            selectedDate: data[0].meeting_date ? new Date(data[0].meeting_date) : new Date(weekStartDate),
-            currentMeetingId: data[0].id
-          }
-        }));
-      } else {
-        const weekDate = new Date(weekStartDate);
-        const resetFormData: FormData = {
-          attendees: '',
-          safetyMessage: '',
-          encoreValues: '',
-          closingDeals: '',
-          biddingDeals: '',
-          hotProperties: '',
-          terminationChanges: ''
-        };
-        
-        setFormData(resetFormData);
-        setSelectedDate(weekDate);
-        setCurrentMeetingId(null);
-        
-        setCachedFormData((prev: CachedFormData) => ({
-          ...prev,
-          [cacheKey]: {
-            formData: resetFormData,
-            selectedDate: weekDate,
-            currentMeetingId: null
-          }
-        }));
-      }
-      
-      setIsFormModified(false);
-    } catch (error: any) {
-      console.error('Error in fetchMeetingForWeek:', error);
       throw error;
     }
-  }, [supabase, cachedFormData]);
+    
+    console.log('Meeting data for week:', data);
+    
+    if (data && data.length > 0) {
+      console.log('Setting form data from database:', data[0]);
+      const newFormData: FormData = {
+        attendees: data[0].attendees || '',
+        safetyMessage: data[0].safety_message || '',
+        encoreValues: data[0].encore_values || '',
+        closingDeals: data[0].closing_deals || '',
+        biddingDeals: data[0].bidding_deals || '',
+        hotProperties: data[0].hot_properties || '',
+        terminationChanges: data[0].termination_changes || '',
+        // New fields
+        associationUpdate: data[0].association_update || '',
+        associationEvents: [] // Will be populated below
+      };
+      
+      // Fetch associated events for this meeting
+      if (data[0].id) {
+        const { data: eventsData, error: eventsError } = await supabase
+          .from('association_events')
+          .select('*')
+          .eq('meeting_id', data[0].id)
+          .order('event_date', { ascending: true });
+        
+        if (eventsError) {
+          console.error('Error fetching association events:', eventsError);
+        } else if (eventsData) {
+          // Transform events data to match our interface
+          newFormData.associationEvents = eventsData.map(event => ({
+            id: event.id,
+            title: event.title || '',
+            date: event.event_date || '',
+            location: event.location || '',
+            assignee: event.assignee || ''
+          }));
+        }
+      }
+      
+      setFormData(newFormData);
+      if (data[0].meeting_date) {
+        setSelectedDate(new Date(data[0].meeting_date));
+      }
+      setCurrentMeetingId(data[0].id);
+      
+      setCachedFormData((prev: CachedFormData) => ({
+        ...prev,
+        [cacheKey]: {
+          formData: newFormData,
+          selectedDate: data[0].meeting_date ? new Date(data[0].meeting_date) : new Date(weekStartDate),
+          currentMeetingId: data[0].id
+        }
+      }));
+    } else {
+      const weekDate = new Date(weekStartDate);
+      const resetFormData: FormData = {
+        attendees: '',
+        safetyMessage: '',
+        encoreValues: '',
+        closingDeals: '',
+        biddingDeals: '',
+        hotProperties: '',
+        terminationChanges: '',
+        // New fields with empty values
+        associationUpdate: '',
+        associationEvents: []
+      };
+      
+      setFormData(resetFormData);
+      setSelectedDate(weekDate);
+      setCurrentMeetingId(null);
+      
+      setCachedFormData((prev: CachedFormData) => ({
+        ...prev,
+        [cacheKey]: {
+          formData: resetFormData,
+          selectedDate: weekDate,
+          currentMeetingId: null
+        }
+      }));
+    }
+    
+    setIsFormModified(false);
+  } catch (error: any) {
+    console.error('Error in fetchMeetingForWeek:', error);
+    throw error;
+  }
+}, [supabase, cachedFormData]);
 
   // Fetch yearly goals data - Updated for regions
   const fetchYearlyGoals = async () => {
@@ -1779,6 +1821,7 @@ const saveData = async () => {
         bidding_deals: formData.biddingDeals,
         hot_properties: formData.hotProperties || '',
         termination_changes: formData.terminationChanges || '',
+        association_update: formData.associationUpdate || '', // Add this line
         updated_at: new Date().toISOString()
       };
       
@@ -1811,9 +1854,80 @@ const saveData = async () => {
         throw error;
       }
       
-      console.log('Level 10 meeting save successful, response:', data);
+      // Now save association events if we have a meeting ID
       if (data && data.length > 0) {
-        console.log('Save successful - using current form values to prevent mismatch');
+        const meetingId = data[0].id;
+        
+        // First, get existing events for this meeting to determine what to update/delete
+        const { data: existingEvents, error: fetchError } = await supabase
+          .from('association_events')
+          .select('id')
+          .eq('meeting_id', meetingId);
+          
+        if (fetchError) {
+          console.error('Error fetching existing association events:', fetchError);
+          throw fetchError;
+        }
+        
+        // Get IDs of existing events
+        const existingIds = new Set((existingEvents || []).map(e => e.id));
+        const currentIds = new Set(formData.associationEvents.filter(e => e.id).map(e => e.id));
+        
+        // Find events to delete (in existing but not in current)
+        const idsToDelete = [...existingIds].filter(id => !currentIds.has(id));
+        
+        // Delete events that no longer exist
+        if (idsToDelete.length > 0) {
+          const { error: deleteError } = await supabase
+            .from('association_events')
+            .delete()
+            .in('id', idsToDelete);
+            
+          if (deleteError) {
+            console.error('Error deleting association events:', deleteError);
+            throw deleteError;
+          }
+        }
+        
+        // Process each event
+        for (const event of formData.associationEvents) {
+          if (event.id) {
+            // Update existing event
+            const { error: updateError } = await supabase
+              .from('association_events')
+              .update({
+                title: event.title,
+                event_date: event.date || null,
+                location: event.location || null,
+                assignee: event.assignee || null,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', event.id);
+              
+            if (updateError) {
+              console.error(`Error updating association event ${event.id}:`, updateError);
+              throw updateError;
+            }
+          } else {
+            // Create new event
+            const { error: insertError } = await supabase
+              .from('association_events')
+              .insert({
+                meeting_id: meetingId,
+                title: event.title,
+                event_date: event.date || null,
+                location: event.location || null,
+                assignee: event.assignee || null
+              });
+              
+            if (insertError) {
+              console.error('Error inserting association event:', insertError);
+              throw insertError;
+            }
+          }
+        }
+        
+        console.log('Level 10 meeting save successful, response:', data);
         setCurrentMeetingId(data[0].id);
         const saveTime = new Date().getTime();
         window.localStorage.setItem('lastSaveTime', saveTime.toString());
@@ -2752,7 +2866,7 @@ const filteredTargets = targets.filter((target: Target) => {
       alt="Agave Icon" 
       className="h-5 w-8 mr-2" 
     />
-    <h3 className="text-lg font-medium text-blue-600">EnCore Values/Sales Story</h3>
+    <h3 className="text-lg font-medium text-blue-600">EnCore Values/Sales Story or Something you Learned</h3>
   </div>
   <FormField
     label=""
@@ -2766,7 +2880,7 @@ const filteredTargets = targets.filter((target: Target) => {
 
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <div className="space-y-6">
-                        <div className="bg-gradient-to-br from-green-50 to-white rounded-xl p-6 border border-green-100 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="bg-gradient-to-br from-green-50 to-white rounded-xl p-6 border border-green-200 shadow-sm hover:shadow-md transition-shadow">
   <div className="mb-4 flex items-center">
     <Handshake className="h-5 w-5 text-green-600 mr-2" />
     <h3 className="text-lg font-medium text-green-700">What We're Closing <span className="text-sm font-normal text-gray-500">(10 minutes)</span></h3>
@@ -2781,7 +2895,7 @@ const filteredTargets = targets.filter((target: Target) => {
   />
 </div>
 
-<div className="bg-gradient-to-br from-yellow-50 to-white rounded-xl p-6 border border-yellow-100 shadow-sm hover:shadow-md transition-shadow">
+<div className="bg-gradient-to-br from-yellow-50 to-white rounded-xl p-6 border border-yellow-200 shadow-sm hover:shadow-md transition-shadow">
   <div className="mb-4 flex items-center">
     <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2" />
     <h3 className="text-lg font-medium text-yellow-700">Hot Properties</h3>
@@ -2798,7 +2912,7 @@ const filteredTargets = targets.filter((target: Target) => {
                         </div>
                         
                         <div className="space-y-6">
-                        <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-6 border border-blue-100 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-6 border border-blue-200 shadow-sm hover:shadow-md transition-shadow">
   <div className="mb-4 flex items-center">
     <FileText className="h-5 w-5 text-blue-600 mr-2" />
     <h3 className="text-lg font-medium text-blue-700">What We're Bidding <span className="text-sm font-normal text-gray-500">(20 minutes)</span></h3>
@@ -2813,7 +2927,7 @@ const filteredTargets = targets.filter((target: Target) => {
   />
 </div>
                           
-                          <div className="bg-gradient-to-br from-red-50 to-white rounded-xl p-6 border border-red-100 shadow-sm hover:shadow-md transition-shadow">
+                          <div className="bg-gradient-to-br from-red-50 to-white rounded-xl p-6 border border-red-200 shadow-sm hover:shadow-md transition-shadow">
   <div className="mb-4 flex items-center">
     <FileX className="h-5 w-5 text-red-600 mr-2" />
     <h3 className="text-lg font-medium text-red-700">Terminations/Ownership Changes</h3>
@@ -2827,8 +2941,26 @@ const filteredTargets = targets.filter((target: Target) => {
     isTextArea
   />
 </div>
-                        </div>
-                      </div>
+</div>
+</div>
+
+{/* Add the CalendarEventsView component here */}
+<div className="mt-8 w-full p-6 border border-blue-200 rounded-xl bg-blue-50">
+  <CalendarEventsView 
+    associationUpdate={formData.associationUpdate}
+    associationEvents={formData.associationEvents}
+    onUpdateChange={(text) => {
+      setFormData(prev => ({...prev, associationUpdate: text}));
+      setIsFormModified(true);
+    }}
+    onEventsChange={(events) => {
+      setFormData(prev => ({...prev, associationEvents: events}));
+      setIsFormModified(true);
+    }}
+  />
+</div>
+                        
+                      
                     </div>
                   </TabsContent>
 

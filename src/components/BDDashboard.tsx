@@ -120,6 +120,13 @@ interface Issue {
   dueDate: Date | null;
 }
 
+interface GeneralTabData {
+  discussionTopics: DiscussionTopic[];
+  actionItems: ActionItem[];
+  processes: Process[];
+  ideasText: string;
+}
+
 interface IssueRecord {
   id: string;
   issue_text: string;
@@ -724,6 +731,8 @@ const [actionItems, setActionItems] = useState<ActionItem[]>([]);
 const [processes, setProcesses] = useState<Process[]>([]);
 const [ideasText, setIdeasText] = useState<string>('');
 const [isGeneralDataModified, setIsGeneralDataModified] = useState<boolean>(false);
+
+const [cachedGeneralData, setCachedGeneralData] = useState<{[key: string]: GeneralTabData}>({});
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);

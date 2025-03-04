@@ -3416,11 +3416,20 @@ const saveTarget = async (updateFn: (targets: Target[]) => Target[]) => {
       
       if (cachedData) {
         console.log('Loading from cache:', cacheKey);
-        setFormData(cachedData.formData);
-        setSelectedDate(cachedData.selectedDate);
-        setCurrentMeetingId(cachedData.currentMeetingId);
+        // Add null check for formData
+        if (cachedData.formData) {
+          setFormData(cachedData.formData);
+        }
+        // Add null check for selectedDate
+        if (cachedData.selectedDate) {
+          setSelectedDate(cachedData.selectedDate);
+        }
+        // Add null check for currentMeetingId with nullish coalescing
+        setCurrentMeetingId(cachedData.currentMeetingId ?? null);
         setIsFormModified(false);
-      } else {
+      }
+      
+      else {
         console.log('No cache found, fetching from database');
         fetchMeetingForWeek(selectedWeek);
       }

@@ -34,6 +34,7 @@ import {
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import CalendarEventsView from './CalendarEventsView';
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, isSameDay, addDays } from 'date-fns';
+import GeneralTab from './GeneralTab';
 
 // Format number with commas (e.g., 1000 → 1,000)
 const formatNumberWithCommas = (value: string): string => {
@@ -276,6 +277,27 @@ interface TabErrors {
     details?: any;
   };
 }
+
+interface DiscussionTopic {
+  id: string | null;
+  title: string;
+  duration: string;
+  notes: string;
+}
+
+interface ActionItem {
+  id: string | null;
+  text: string;
+  completed: boolean;
+  assignedTo: string;
+}
+
+interface Process {
+  id: string | null;
+  title: string;
+  description: string;
+}
+
 
 interface CachedFormData {
   [key: string]: {
@@ -691,6 +713,11 @@ const BDDashboard = () => {
   // State Management
   // ========================
  
+  const [discussionTopics, setDiscussionTopics] = useState<DiscussionTopic[]>([]);
+const [actionItems, setActionItems] = useState<ActionItem[]>([]);
+const [processes, setProcesses] = useState<Process[]>([]);
+const [ideasText, setIdeasText] = useState<string>('');
+const [isGeneralDataModified, setIsGeneralDataModified] = useState<boolean>(false);
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -923,6 +950,7 @@ const [formData, setFormData] = useState<FormData>({
   // ========================
   
 // Main fetch function that handles all data fetching based on active tab
+// Main fetch function that handles all data fetching based on active tab
 const fetchData = useCallback(async () => {
   if (!supabase || connectionError) return;
   
@@ -954,6 +982,103 @@ const fetchData = useCallback(async () => {
       } else {
         console.log('Using current Target List data (unsaved changes exist)');
       }
+    } else if (activeTab === "general") {
+      // Check if we already have cached data
+      const cacheKey = `general_${selectedWeek}`;
+      if (cachedFormData[cacheKey]) {
+        console.log('Using cached data for', cacheKey);
+        setDiscussionTopics(cachedFormData[cacheKey].discussionTopics || []);
+        setActionItems(cachedFormData[cacheKey].actionItems || []);
+        setProcesses(cachedFormData[cacheKey].processes || []);
+        setIdeasText(cachedFormData[cacheKey].ideasText || '');
+        setIsGeneralDataModified(false);
+        return;
+      }
+      
+      console.log('Fetching general data...');
+      try {
+        // Fetch discussion topics
+        const { data: discussionData, error: discussionError } = await supabase
+          .from('discussion_topics')
+          .select('*')
+          .eq('week_start_date', selectedWeek);
+          
+        if (discussionError) throw discussionError;
+        
+        // Fetch action items
+        const { data: actionItemsData, error: actionItemsError } = await supabase
+          .from('action_items')
+          .select('*')
+          .eq('week_start_date', selectedWeek);
+          
+        if (actionItemsError) throw actionItemsError;
+        
+        // Fetch processes (not tied to a specific week)
+        const { data: processesData, error: processesError } = await supabase
+          .from('processes')
+          .select('*');
+          
+        if (processesError) throw processesError;
+        
+        // Fetch ideas text
+        const { data: ideasData, error: ideasError } = await supabase
+          .from('ideas')
+          .select('*')
+          .eq('week_start_date', selectedWeek)
+          .maybeSingle(); // Use maybeSingle instead of single to avoid error if no record
+          
+        if (ideasError && ideasError.code !== 'PGRST116') throw ideasError;
+        
+        // Transform data to match our interfaces
+        const transformedDiscussionTopics = discussionData ? discussionData.map((item: any) => ({
+          id: item.id,
+          title: item.title || '',
+          duration: item.duration || '',
+          notes: item.notes || ''
+        })) : [];
+        
+        const transformedActionItems = actionItemsData ? actionItemsData.map((item: any) => ({
+          id: item.id,
+          text: item.text || '',
+          completed: item.completed || false,
+          assignedTo: item.assigned_to || ''
+        })) : [];
+        
+        const transformedProcesses = processesData ? processesData.map((item: any) => ({
+          id: item.id,
+          title: item.title || '',
+          description: item.description || ''
+        })) : [];
+        
+        const fetchedIdeasText = ideasData ? ideasData.ideas_text || '' : '';
+        
+        // Update state
+        setDiscussionTopics(transformedDiscussionTopics);
+        setActionItems(transformedActionItems);
+        setProcesses(transformedProcesses);
+        setIdeasText(fetchedIdeasText);
+        setIsGeneralDataModified(false);
+        
+        // Cache the data
+        setCachedFormData((prev) => ({
+          ...prev,
+          [cacheKey]: {
+            discussionTopics: transformedDiscussionTopics,
+            actionItems: transformedActionItems,
+            processes: transformedProcesses,
+            ideasText: fetchedIdeasText
+          }
+        }));
+      } catch (error) {
+        console.error('Error fetching general data:', error);
+        setTabErrors((prev) => ({
+          ...prev,
+          general: {
+            message: 'Failed to fetch general data',
+            details: error
+          }
+        }));
+      }
     }
   } catch (error: any) {
     console.error(`Error fetching data for ${activeTab}:`, error);
@@ -968,6 +1093,8 @@ const fetchData = useCallback(async () => {
     setIsLoading(false);
   }
 }, [activeTab, selectedWeek, supabase, connectionError, isTargetListModified]);
+
+
 // Fetch Level 10 Meeting data for the selected week
 // Fetch Level 10 Meeting data for the selected week
 const fetchMeetingForWeek = useCallback(async (weekStartDate: string) => {
@@ -1484,13 +1611,25 @@ const fetchMeetingForWeek = useCallback(async (weekStartDate: string) => {
   // Event Handlers
   // ========================
   
-  // Handle tab change
 // Handle tab change
+// Update your handleTabChange function to include the General tab
 const handleTabChange = (value: string) => {
   if (value !== activeTab) {
     // If leaving the VTO tab, save any changes to metrics
     if (activeTab === "vto") {
       saveYearlyGoals();
+    }
+    
+    // If leaving the General tab, save any changes
+    if (activeTab === "general" && isGeneralDataModified) {
+      console.log('Saving General tab data before tab change');
+      saveGeneralData({
+        discussionTopics,
+        actionItems,
+        processes,
+        ideasText
+      });
+      setIsGeneralDataModified(false);
     }
     
     // If leaving the Target List tab, save any changes
@@ -2754,6 +2893,245 @@ if (data && data.length > 0) {
   }
 };
 
+// Add this function to BDDashboard component
+const saveGeneralData = async (data: {
+  discussionTopics: DiscussionTopic[];
+  actionItems: ActionItem[];
+  processes: Process[];
+  ideasText: string;
+}) => {
+  if (!supabase) {
+    setConnectionError('Supabase client is not initialized. Cannot save data.');
+    return;
+  }
+  
+  setSaveStatus('saving');
+  
+  try {
+    console.log('Saving general data...');
+    
+    // Save discussion topics
+    // First, get existing topics for this week to determine what to update/delete
+    const { data: existingTopics, error: fetchTopicsError } = await supabase
+      .from('discussion_topics')
+      .select('id')
+      .eq('week_start_date', selectedWeek);
+      
+    if (fetchTopicsError) throw fetchTopicsError;
+    
+    // Get IDs of existing topics
+    const existingTopicIds = new Set((existingTopics || []).map(t => t.id));
+    const currentTopicIds = new Set(data.discussionTopics.filter(t => t.id && !t.id.toString().startsWith('temp-')).map(t => t.id));
+    
+    // Find topics to delete (in existing but not in current)
+    const topicIdsToDelete = [...existingTopicIds].filter(id => !currentTopicIds.has(id));
+    
+    // Delete topics that no longer exist
+    if (topicIdsToDelete.length > 0) {
+      const { error: deleteTopicsError } = await supabase
+        .from('discussion_topics')
+        .delete()
+        .in('id', topicIdsToDelete);
+        
+      if (deleteTopicsError) throw deleteTopicsError;
+    }
+    
+    // Process each topic
+    for (const topic of data.discussionTopics) {
+      if (topic.id && !topic.id.toString().startsWith('temp-')) {
+        // Update existing topic
+        const { error: updateTopicError } = await supabase
+          .from('discussion_topics')
+          .update({
+            title: topic.title,
+            duration: topic.duration,
+            notes: topic.notes,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', topic.id);
+          
+        if (updateTopicError) throw updateTopicError;
+      } else {
+        // Create new topic
+        const { error: insertTopicError } = await supabase
+          .from('discussion_topics')
+          .insert({
+            title: topic.title,
+            duration: topic.duration,
+            notes: topic.notes,
+            week_start_date: selectedWeek
+          });
+          
+        if (insertTopicError) throw insertTopicError;
+      }
+    }
+    
+    // Save action items using the same pattern
+    const { data: existingItems, error: fetchItemsError } = await supabase
+      .from('action_items')
+      .select('id')
+      .eq('week_start_date', selectedWeek);
+      
+    if (fetchItemsError) throw fetchItemsError;
+    
+    const existingItemIds = new Set((existingItems || []).map(i => i.id));
+    const currentItemIds = new Set(data.actionItems.filter(i => i.id && !i.id.toString().startsWith('temp-')).map(i => i.id));
+    
+    const itemIdsToDelete = [...existingItemIds].filter(id => !currentItemIds.has(id));
+    
+    if (itemIdsToDelete.length > 0) {
+      const { error: deleteItemsError } = await supabase
+        .from('action_items')
+        .delete()
+        .in('id', itemIdsToDelete);
+        
+      if (deleteItemsError) throw deleteItemsError;
+    }
+    
+    for (const item of data.actionItems) {
+      if (item.id && !item.id.toString().startsWith('temp-')) {
+        const { error: updateItemError } = await supabase
+          .from('action_items')
+          .update({
+            text: item.text,
+            completed: item.completed,
+            assigned_to: item.assignedTo,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', item.id);
+          
+        if (updateItemError) throw updateItemError;
+      } else {
+        const { error: insertItemError } = await supabase
+          .from('action_items')
+          .insert({
+            text: item.text,
+            completed: item.completed,
+            assigned_to: item.assignedTo,
+            week_start_date: selectedWeek
+          });
+          
+        if (insertItemError) throw insertItemError;
+      }
+    }
+    
+    // Save processes (not tied to a specific week)
+    // This is a bit different since processes aren't tied to weeks
+    const { data: allProcesses, error: fetchProcessesError } = await supabase
+      .from('processes')
+      .select('id');
+      
+    if (fetchProcessesError) throw fetchProcessesError;
+    
+    const existingProcessIds = new Set((allProcesses || []).map(p => p.id));
+    const currentProcessIds = new Set(data.processes.filter(p => p.id && !p.id.toString().startsWith('temp-')).map(p => p.id));
+    
+    const processIdsToDelete = [...existingProcessIds].filter(id => !currentProcessIds.has(id));
+    
+    if (processIdsToDelete.length > 0) {
+      const { error: deleteProcessesError } = await supabase
+        .from('processes')
+        .delete()
+        .in('id', processIdsToDelete);
+        
+      if (deleteProcessesError) throw deleteProcessesError;
+    }
+    
+    for (const process of data.processes) {
+      if (process.id && !process.id.toString().startsWith('temp-')) {
+        const { error: updateProcessError } = await supabase
+          .from('processes')
+          .update({
+            title: process.title,
+            description: process.description,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', process.id);
+          
+        if (updateProcessError) throw updateProcessError;
+      } else {
+        const { error: insertProcessError } = await supabase
+          .from('processes')
+          .insert({
+            title: process.title,
+            description: process.description
+          });
+          
+        if (insertProcessError) throw insertProcessError;
+      }
+    }
+    
+    // Save ideas text
+    // First check if a record exists for this week
+    const { data: existingIdeas, error: fetchIdeasError } = await supabase
+      .from('ideas')
+      .select('id')
+      .eq('week_start_date', selectedWeek)
+      .maybeSingle();
+      
+    if (fetchIdeasError && fetchIdeasError.code !== 'PGRST116') throw fetchIdeasError;
+    
+    if (existingIdeas) {
+      // Update existing ideas
+      const { error: updateIdeasError } = await supabase
+        .from('ideas')
+        .update({
+          ideas_text: data.ideasText,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingIdeas.id);
+        
+      if (updateIdeasError) throw updateIdeasError;
+    } else {
+      // Create new ideas
+      const { error: insertIdeasError } = await supabase
+        .from('ideas')
+        .insert({
+          ideas_text: data.ideasText,
+          week_start_date: selectedWeek
+        });
+        
+      if (insertIdeasError) throw insertIdeasError;
+    }
+    
+    // Update state with saved data
+    setDiscussionTopics(data.discussionTopics);
+    setActionItems(data.actionItems);
+    setProcesses(data.processes);
+    setIdeasText(data.ideasText);
+    
+    // Cache the data
+    const cacheKey = `general_${selectedWeek}`;
+    setCachedFormData((prev) => ({
+      ...prev,
+      [cacheKey]: {
+        discussionTopics: data.discussionTopics,
+        actionItems: data.actionItems,
+        processes: data.processes,
+        ideasText: data.ideasText
+      }
+    }));
+    
+    setIsGeneralDataModified(false);
+    
+    setSaveStatus('success');
+    setTimeout(() => setSaveStatus('idle'), 3000);
+    
+    console.log('General data saved successfully');
+  } catch (error) {
+    console.error('Error saving general data:', error);
+    setSaveStatus('error');
+    setTabErrors((prev) => ({
+      ...prev,
+      general: {
+        message: 'Failed to save general data',
+        details: error
+      }
+    }));
+    setTimeout(() => setSaveStatus('idle'), 3000);
+  }
+};
+
   // Save yearly goals separately - Updated for regions
   const saveYearlyGoals = async (region?: string, currentRevenueStr?: string, currentRetentionStr?: string) => {
     if (!supabase) return;
@@ -3687,6 +4065,31 @@ const RevenueDetailsModal = () => {
                       
                     </div>
                   </TabsContent>
+
+{/* General Tab Content */}
+<TabsContent value="general">
+  {isLoading ? (
+    <LoadingIndicator message="Loading general data..." />
+  ) : tabErrors[activeTab] ? (
+    <ErrorCard 
+      title="Error in general tab" 
+      error={tabErrors[activeTab]} 
+      onRetry={() => fetchData()} 
+    />
+  ) : (
+    <GeneralTab 
+      initialDiscussionTopics={discussionTopics}
+      initialActionItems={actionItems}
+      initialProcesses={processes}
+      initialIdeasText={ideasText}
+      weekStartDate={selectedWeek}
+      onSaveData={saveGeneralData}
+      isSaving={saveStatus === 'saving'}
+    />
+  )}
+</TabsContent>
+
+
 
                   {/* Vision Traction Organizer Tab - IMPROVED UI FOR YEARLY GOALS */}
                   <TabsContent value="vto" className="space-y-6">

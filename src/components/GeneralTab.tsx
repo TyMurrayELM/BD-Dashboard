@@ -13,21 +13,21 @@ import { Button } from "@/components/ui/button";
 
 // Define types for our data
 interface DiscussionTopic {
-  id: string;
-  title: string;
-  duration: string;
-  notes: string;
-}
+    id: string | null; // Now accepts null as well
+    title: string;
+    duration: string;
+    notes: string;
+  }
 
 interface ActionItem {
-  id: string;
+    id: string | null;
   text: string;
   completed: boolean;
   assignedTo: string;
 }
 
 interface Process {
-  id: string;
+    id: string | null;
   title: string;
   description: string;
 }

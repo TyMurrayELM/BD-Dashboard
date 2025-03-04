@@ -301,11 +301,17 @@ interface Process {
 
 interface CachedFormData {
   [key: string]: {
-    formData: FormData;
-    selectedDate: Date;
-    currentMeetingId: string | null;
+    formData?: FormData;
+    selectedDate?: Date;
+    currentMeetingId?: string | null;
+    // Add these properties for General tab data
+    discussionTopics?: DiscussionTopic[];
+    actionItems?: ActionItem[];
+    processes?: Process[];
+    ideasText?: string;
   };
 }
+
 // Custom hook for Supabase initialization
 const useSupabase = () => {
   const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
@@ -1059,16 +1065,18 @@ const fetchData = useCallback(async () => {
         setIdeasText(fetchedIdeasText);
         setIsGeneralDataModified(false);
         
-        // Cache the data
-        setCachedFormData((prev) => ({
-          ...prev,
-          [cacheKey]: {
-            discussionTopics: transformedDiscussionTopics,
-            actionItems: transformedActionItems,
-            processes: transformedProcesses,
-            ideasText: fetchedIdeasText
-          }
-        }));
+// Cache the data - updated to match CachedFormData interface
+setCachedFormData((prev) => ({
+  ...prev,
+  [cacheKey]: {
+    // These properties are now optional in the interface
+    discussionTopics: transformedDiscussionTopics,
+    actionItems: transformedActionItems,
+    processes: transformedProcesses,
+    ideasText: fetchedIdeasText
+  }
+}));
+
       } catch (error) {
         console.error('Error fetching general data:', error);
         setTabErrors((prev) => ({
@@ -3100,17 +3108,18 @@ const saveGeneralData = async (data: {
     setProcesses(data.processes);
     setIdeasText(data.ideasText);
     
-    // Cache the data
-    const cacheKey = `general_${selectedWeek}`;
-    setCachedFormData((prev) => ({
-      ...prev,
-      [cacheKey]: {
-        discussionTopics: data.discussionTopics,
-        actionItems: data.actionItems,
-        processes: data.processes,
-        ideasText: data.ideasText
-      }
-    }));
+// Cache the data in saveGeneralData
+const cacheKey = `general_${selectedWeek}`;
+setCachedFormData((prev) => ({
+  ...prev,
+  [cacheKey]: {
+    // Match the structure expected by CachedFormData interface
+    discussionTopics: data.discussionTopics,
+    actionItems: data.actionItems,
+    processes: data.processes,
+    ideasText: data.ideasText
+  }
+}));
     
     setIsGeneralDataModified(false);
     

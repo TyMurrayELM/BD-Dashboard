@@ -1152,9 +1152,14 @@ const fetchMeetingForWeek = useCallback(async (weekStartDate: string) => {
   const cacheKey = `level10_${weekStartDate}`;
   if (cachedFormData[cacheKey]) {
     console.log('Using cached data for', cacheKey);
-    setFormData(cachedFormData[cacheKey].formData);
-    setSelectedDate(cachedFormData[cacheKey].selectedDate);
-    setCurrentMeetingId(cachedFormData[cacheKey].currentMeetingId);
+    // Add null checks with the nullish coalescing operator (??)
+    if (cachedFormData[cacheKey].formData) {
+      setFormData(cachedFormData[cacheKey].formData);
+    }
+    if (cachedFormData[cacheKey].selectedDate) {
+      setSelectedDate(cachedFormData[cacheKey].selectedDate);
+    }
+    setCurrentMeetingId(cachedFormData[cacheKey].currentMeetingId ?? null);
     
     // If we have a meeting ID in the cache, fetch property revenues
     if (cachedFormData[cacheKey].currentMeetingId) {
@@ -1242,9 +1247,14 @@ const fetchMeetingForWeek = useCallback(async (weekStartDate: string) => {
       setCachedFormData((prev: CachedFormData) => ({
         ...prev,
         [cacheKey]: {
-          formData: newFormData,
+          formData: { ...formData },
           selectedDate: data[0].meeting_date ? new Date(data[0].meeting_date) : new Date(weekStartDate),
-          currentMeetingId: data[0].id
+          currentMeetingId: data[0].id,
+          // Add empty arrays for General tab properties to satisfy the type
+          discussionTopics: [],
+          actionItems: [],
+          processes: [],
+          ideasText: ''
         }
       }));
     } else {
@@ -1656,7 +1666,12 @@ const handleTabChange = (value: string) => {
         [cacheKey]: {
           formData: { ...formData },
           selectedDate,
-          currentMeetingId
+          currentMeetingId,
+          // Add empty arrays for General tab properties to satisfy the type
+          discussionTopics: [],
+          actionItems: [],
+          processes: [],
+          ideasText: ''
         }
       }));
       setIsFormModified(false);
